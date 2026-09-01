@@ -55,7 +55,9 @@ class Order(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     total_amount = Column(Float, nullable=False)
-    status = Column(String(50), default="processing")  # processing, shipped, delivered
+    status = Column(String(50), default="pending_payment")  # pending_payment, processing, shipped, delivered, cancelled
+    payment_status = Column(String(50), default="pending")  # pending, paid, failed
+    stripe_payment_intent_id = Column(String(255), nullable=True)
     shipping_name = Column(String(100))
     shipping_address = Column(String(500))
     shipping_city = Column(String(100))

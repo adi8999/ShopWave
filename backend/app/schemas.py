@@ -114,6 +114,8 @@ class OrderOut(BaseModel):
     id: int
     total_amount: float
     status: str
+    payment_status: Optional[str] = "pending"
+    stripe_payment_intent_id: Optional[str] = None
     shipping_name: Optional[str]
     shipping_address: Optional[str]
     shipping_city: Optional[str]
@@ -154,3 +156,33 @@ class SalesSummary(BaseModel):
     recent_orders: List[AllOrderOut]
     top_products: List[TopProduct]
 
+
+# ─── Pagination ───────────────────────────────────────────────────────────────
+
+class ProductPage(BaseModel):
+    items: List[ProductOut]
+    total: int
+    page: int
+    pages: int
+    limit: int
+
+
+# ─── Payments (Stripe) ────────────────────────────────────────────────────────
+
+class PaymentIntentCreate(BaseModel):
+    order_id: int
+
+
+class PaymentIntentResponse(BaseModel):
+    client_secret: str
+    payment_intent_id: str
+    amount: int  # in cents
+    publishable_key: str
+
+
+class CheckoutWithPayment(BaseModel):
+    shipping_name: str
+    shipping_address: str
+    shipping_city: str
+    shipping_zip: str
+    payment_intent_id: Optional[str] = None

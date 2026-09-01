@@ -5,7 +5,7 @@ from sqlalchemy import func
 
 from app import models, schemas
 from app.auth import get_admin_user
-from app.database import get_db
+from app.database import get_db, cache_invalidate_pattern
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -30,6 +30,7 @@ def admin_create_product(
     db.add(product)
     db.commit()
     db.refresh(product)
+    cache_invalidate_pattern("products:*")
     return product
 
 
@@ -50,6 +51,7 @@ def admin_update_product(
 
     db.commit()
     db.refresh(product)
+    cache_invalidate_pattern("products:*")
     return product
 
 
@@ -64,6 +66,7 @@ def admin_delete_product(
         raise HTTPException(status_code=404, detail="Product not found")
     db.delete(product)
     db.commit()
+    cache_invalidate_pattern("products:*")
 
 
 # ─── Sales / Analytics ────────────────────────────────────────────────────────
@@ -172,13 +175,13 @@ def admin_list_orders(
 
 
 @router.patch("/orders/{order_id}/status")
-def admin_update_order_status(
+async def admin_update_order_status(
     order_id: int,
     status: str,
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_admin_user),
 ):
-    valid = {"processing", "shipped", "delivered", "cancelled"}
+    valid = {"pending_payment", "processing", "shipped", "delivered", "cancelled"}
     if status not in valid:
         raise HTTPException(status_code=400, detail=f"Status must be one of {valid}")
     order = db.query(models.Order).filter(models.Order.id == order_id).first()
@@ -186,4 +189,10 @@ def admin_update_order_status(
         raise HTTPException(status_code=404, detail="Order not found")
     order.status = status
     db.commit()
+    # Broadcast to WebSocket clients tracking this order
+    try:
+        from app.routers.orders import manager
+        await manager.broadcast(order_id, {"order_id": order_id, "status": status})
+    except Exception:
+        pass
     return {"id": order.id, "status": order.status}

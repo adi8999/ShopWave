@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine
 from app import models
-from app.routers import auth, products, cart, orders, admin
+from app.routers import auth, products, cart, orders, admin, payments
 
 # Create all tables
 models.Base.metadata.create_all(bind=engine)
@@ -28,6 +28,7 @@ app.include_router(products.router)
 app.include_router(cart.router)
 app.include_router(orders.router)
 app.include_router(admin.router)
+app.include_router(payments.router)
 
 
 @app.get("/")
