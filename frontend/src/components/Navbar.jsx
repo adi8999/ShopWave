@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ShoppingCart, User, LogOut, Menu, X, Package, Zap, Shield } from 'lucide-react'
+import { ShoppingCart, User, LogOut, Menu, X, Package, Zap, Shield, Sparkles } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import './Navbar.css'
@@ -36,6 +36,18 @@ export default function Navbar() {
         <div className={`navbar-links ${mobileOpen ? 'open' : ''}`}>
           <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`} onClick={() => setMobileOpen(false)}>Home</Link>
           <Link to="/products" className={`nav-link ${isActive('/products') ? 'active' : ''}`} onClick={() => setMobileOpen(false)}>Products</Link>
+          <button
+            type="button"
+            className="nav-link nav-ai-trigger"
+            id="navbar-ai-assistant-btn"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('open-shopwave-chat'))
+              setMobileOpen(false)
+            }}
+          >
+            <Sparkles size={14} className="nav-sparkle-spin" />
+            <span>AI Assistant</span>
+          </button>
           {isLoggedIn && (
             <Link to="/orders" className={`nav-link ${isActive('/orders') ? 'active' : ''}`} onClick={() => setMobileOpen(false)}>My Orders</Link>
           )}
@@ -45,6 +57,7 @@ export default function Navbar() {
             </Link>
           )}
         </div>
+
 
         {/* Right actions */}
         <div className="navbar-actions">

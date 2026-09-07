@@ -84,6 +84,13 @@ export default function ChatWidget() {
     }
   }, [isOpen])
 
+  // Allow external triggers (such as Navbar button) to open chat
+  useEffect(() => {
+    const handleOpen = () => setIsOpen(true)
+    window.addEventListener('open-shopwave-chat', handleOpen)
+    return () => window.removeEventListener('open-shopwave-chat', handleOpen)
+  }, [])
+
   const handleSendMessage = async (textToSend) => {
     const query = (textToSend || inputValue).trim()
     if (!query || isLoading) return

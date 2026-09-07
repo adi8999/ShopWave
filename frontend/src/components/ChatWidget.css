@@ -1,12 +1,14 @@
 /* ── Chat Widget Styles ────────────────────────────────────────────── */
 
 .chat-widget-root {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 9999;
+  position: fixed !important;
+  bottom: 24px !important;
+  right: 24px !important;
+  z-index: 999999 !important;
   font-family: inherit;
+  pointer-events: auto !important;
 }
+
 
 /* ── Floating Launcher Button ─────────────────────────────────────── */
 .chat-launcher-btn {
