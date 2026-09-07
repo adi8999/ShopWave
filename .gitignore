@@ -29,3 +29,7 @@ __pycache__/
 .vscode/
 .idea/
 *.pem
+.aider*
+ShopWave 3/
+*.zip
+

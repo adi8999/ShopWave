@@ -9,7 +9,12 @@ import toast from 'react-hot-toast'
 import './Checkout.css'
 
 // Initialize Stripe instance (loads dynamically or uses sandbox)
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_placeholder_key')
+const stripePromise = loadStripe(
+  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ||
+  import.meta.env.VITE_STRIPE_PUBLIC_KEY ||
+  'pk_test_placeholder_key'
+)
+
 
 function CheckoutFormContent({ items, totalPrice, clearCart, shipping, tax, orderTotal }) {
   const navigate = useNavigate()

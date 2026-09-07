@@ -14,6 +14,7 @@ import Orders from './pages/Orders'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import AdminDashboard from './pages/AdminDashboard'
+import ChatWidget from './components/ChatWidget'
 
 export default function App() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
               }
             />
           </Routes>
+          <ChatWidget />
           <Toaster
             position="bottom-right"
             toastOptions={{
