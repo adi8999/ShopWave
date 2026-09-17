@@ -27,6 +27,12 @@ A production-ready e-commerce web application featuring user authentication, sho
   - User registration & login with JWT bearer tokens.
   - Secure password hashing using native `bcrypt`.
   - Account-level data isolation (users only see their own cart and orders).
+  - **Sliding-Window Rate Limiting**: Redis-backed sliding-window limiter (with thread-safe in-memory fallback):
+    - `POST /api/auth/login` & `POST /api/auth/signup`: 10 req / 60s per IP (brute-force prevention)
+    - `POST /api/payments/create-checkout-session`: 10 req / 60s per IP
+    - `POST /api/chat`: 20 req / 60s per IP
+    - `GET /api/products` (search): 60 req / 60s per IP
+  - **AI Safety & Sanitization**: PII redaction (emails, phones, credit cards, SSNs) and prompt injection neutralization on AI inputs.
 - **Admin Panel & Sales Monitoring**:
   - Role-based authorization (`is_admin=True` check on protected routes).
   - **Full Product CRUD**: Add, edit, and delete catalog products inline with confirm modals.

@@ -198,3 +198,11 @@ chat_limiter = RateLimiter(
     window_seconds=60,
     key_prefix="rl:chat",
 )
+
+#: Strict limiter for authentication (login / signup) — 10 requests / 60 s per IP
+auth_limiter = RateLimiter(
+    requests=10,
+    window_seconds=60,
+    key_prefix="rl:auth",
+)
+
