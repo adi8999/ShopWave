@@ -38,7 +38,7 @@ A production-ready e-commerce web application featuring user authentication, sho
 
 | Layer | Technologies |
 |---|---|
-| **Frontend** | React 19, Vite, React Router 7, Axios, Lucide Icons, React Hot Toast, Stripe Elements |
+| **Frontend** | React 19 (JSX), Vite, React Router 7, Axios, Lucide Icons, React Hot Toast, Stripe Elements |
 | **Backend** | FastAPI (Python 3.11+), Uvicorn / Gunicorn, Pydantic v2, SQLAlchemy ORM |
 | **AI & LLM** | Google Gemini (`google-genai`), OpenAI / OpenRouter Tool Calling API |
 | **Database & Cache** | PostgreSQL (AWS RDS) / SQLite (Local Dev), Redis |
