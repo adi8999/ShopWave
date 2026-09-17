@@ -32,12 +32,12 @@ const INITIAL_MESSAGE = {
 const SUGGESTIONS = [
   { label: '🎧 Tech under $300', prompt: 'Can you recommend top tech or headphones under $300?' },
   { label: '📦 Track order #1001', prompt: 'Can you check the delivery status of order #1001?' },
+  { label: '🎟️ Promo coupons', prompt: 'What coupon codes or discounts are available?' },
   { label: '✨ Daily essentials', prompt: 'What are your most popular daily essentials?' },
-  { label: '🚚 Shipping & returns', prompt: 'What is your shipping time and return policy?' },
 ]
 
 export default function ChatWidget() {
-  const { addToCart } = useCart()
+  const { addToCart, fetchCart } = useCart()
   const navigate = useNavigate()
 
   const [isOpen, setIsOpen] = useState(false)
@@ -131,6 +131,11 @@ export default function ChatWidget() {
       }
 
       setMessages((prev) => [...prev, botMessage])
+
+      // If the assistant performed an add_to_cart tool call, refresh cart state immediately
+      if (response.data.tool_calls?.some((tc) => tc.name === 'add_to_cart')) {
+        fetchCart?.()
+      }
 
       if (!isOpen) {
         setHasUnread(true)

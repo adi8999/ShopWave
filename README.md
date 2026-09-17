@@ -7,8 +7,11 @@ A production-ready e-commerce web application featuring user authentication, sho
 ## 🌟 Key Features
 
 - **🤖 AI Shopping Assistant & Customer Support Chatbot**:
-  - **Tool Calling (Function Calling)**: Powered by Google Gemini / OpenRouter multi-turn function calling with live database execution.
+  - **Tool Calling (Function Calling)**: Powered by Google Gemini / OpenRouter multi-turn function calling with live database execution:
     - `search_products(query, max_price, category)`: Scans catalog products across multiple fields, prices, and categories.
+    - `get_product_details(product_id)`: Fetches full specifications, descriptions, ratings, and live inventory.
+    - `add_to_cart(product_id, quantity)`: Directly adds requested items to the authenticated user's shopping cart.
+    - `apply_coupon(code)`: Validates promotional discount codes (e.g. `SAVE10`, `WELCOME20`) and computes savings.
     - `get_order_status(order_id)`: Fetches live order fulfillment status (`processing`, `shipped`, `delivered`), total amount, shipping destination, and itemized receipts.
   - **Interactive Clickable Product Cards**: Chatbot responses include interactive product cards with images, prices, ratings, direct links to product pages, and a **1-click "Add to Cart"** button.
   - **Floating Drawer & Navbar Trigger**: Accessible via a floating widget launcher button at the bottom-right and an **AI Assistant** pill in the top navigation bar.
