@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.auth import get_current_user
 from app.database import get_db
+from app.security.rate_limit import checkout_limiter
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 
@@ -19,8 +20,10 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 @router.post("/create-checkout-session", response_model=schemas.PaymentIntentResponse)
 def create_checkout_session(
     payload: schemas.PaymentIntentCreate,
+    request: Request,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    _rl: None = Depends(checkout_limiter),
 ):
     if not stripe.api_key:
         raise HTTPException(status_code=503, detail="Stripe is not configured")

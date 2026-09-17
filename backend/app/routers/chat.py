@@ -3,13 +3,15 @@ import logging
 import os
 import re
 from typing import List, Optional, Any, Dict
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from app import models
 from app.database import get_db
+from app.security.rate_limit import chat_limiter
+from app.security.sanitize import sanitize_ai_context
 
 logger = logging.getLogger(__name__)
 
@@ -478,12 +480,28 @@ def rule_based_fallback(message: str, db: Session) -> ChatResponse:
 # ── Chat Endpoint ─────────────────────────────────────────────────────
 
 @router.post("", response_model=ChatResponse)
-def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
+def chat_endpoint(
+    payload: ChatRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+    _rl: None = Depends(chat_limiter),
+):
     """
     POST /api/chat
     Receives user message and optional chat history.
+    Sanitizes input for PII / prompt-injection before forwarding to the AI model.
     Executes tool calling loop with Gemini / OpenRouter / OpenAI to query products or order status.
     """
+    # ── Security: sanitize message before it reaches any AI model ────────
+    try:
+        safe_message = sanitize_ai_context(payload.message)
+    except ValueError as exc:
+        logger.warning(f"Blocked unsafe chat input from {http_request.client}: {exc}")
+        raise HTTPException(
+            status_code=400,
+            detail="Your message contains disallowed content. Please rephrase and try again.",
+        )
+
     gemini_key = os.getenv("GEMINI_API_KEY")
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -492,8 +510,8 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
     if gemini_key and len(gemini_key.strip()) > 10 and not gemini_key.startswith("your_"):
         try:
             return run_gemini_native_loop(
-                message=request.message,
-                history=request.history,
+                message=safe_message,
+                history=payload.history,
                 db=db,
                 gemini_api_key=gemini_key.strip(),
             )
@@ -504,8 +522,8 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
     if openrouter_key and len(openrouter_key.strip()) > 10:
         try:
             return run_openai_compatible_loop(
-                message=request.message,
-                history=request.history,
+                message=safe_message,
+                history=payload.history,
                 db=db,
                 api_key=openrouter_key.strip(),
                 base_url="https://openrouter.ai/api/v1",
@@ -518,8 +536,8 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
     if openai_key and len(openai_key.strip()) > 10 and not openai_key.startswith("your_"):
         try:
             return run_openai_compatible_loop(
-                message=request.message,
-                history=request.history,
+                message=safe_message,
+                history=payload.history,
                 db=db,
                 api_key=openai_key.strip(),
                 model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),

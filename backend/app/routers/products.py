@@ -1,12 +1,14 @@
 import hashlib
 import json
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.auth import get_admin_user
 from app.database import get_db, cache_get, cache_set
+from app.security.rate_limit import search_limiter
+from app.security.sanitize import sanitize_search_query
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -22,6 +24,7 @@ def _make_cache_key(**kwargs) -> str:
 
 @router.get("", response_model=schemas.ProductPage)
 def list_products(
+    request: Request,
     q: Optional[str] = Query(None, description="Search by name/description"),
     category: Optional[str] = Query(None),
     min_price: Optional[float] = Query(None),
@@ -33,6 +36,7 @@ def list_products(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    _rl: None = Depends(search_limiter),
 ):
     # Try Redis cache first
     cache_key = _make_cache_key(
@@ -45,8 +49,12 @@ def list_products(
 
     query = db.query(models.Product)
 
-    # Full-text search across name and description
+    # Full-text search across name and description (sanitized)
     if q:
+        try:
+            q = sanitize_search_query(q)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid search query.")
         pattern = f"%{q}%"
         query = query.filter(
             models.Product.name.ilike(pattern) |
