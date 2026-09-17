@@ -1,7 +1,8 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
+
 
 
 class User(Base):
@@ -34,6 +35,8 @@ class Product(Base):
 
     cart_items = relationship("CartItem", back_populates="product")
     order_items = relationship("OrderItem", back_populates="product")
+    reviews = relationship("Review", back_populates="product", cascade="all, delete-orphan")
+
 
 
 class CartItem(Base):
@@ -79,3 +82,20 @@ class OrderItem(Base):
 
     order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")
+
+
+class Review(Base):
+    __tablename__ = "reviews"
+    __table_args__ = (UniqueConstraint("user_id", "product_id", name="uq_user_product_review"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    rating = Column(Integer, nullable=False)  # 1 - 5
+    comment = Column(Text, nullable=False)
+    verified_purchase = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    product = relationship("Product", back_populates="reviews")
+

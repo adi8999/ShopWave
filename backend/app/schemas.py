@@ -186,3 +186,32 @@ class CheckoutWithPayment(BaseModel):
     shipping_city: str
     shipping_zip: str
     payment_intent_id: Optional[str] = None
+
+
+# ─── Reviews ─────────────────────────────────────────────────────────────────
+
+class ReviewCreate(BaseModel):
+    rating: int
+    comment: str
+
+
+class ReviewOut(BaseModel):
+    id: int
+    user_id: int
+    user_name: str
+    product_id: int
+    rating: int
+    comment: str
+    verified_purchase: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ReviewList(BaseModel):
+    reviews: List[ReviewOut]
+    total: int
+    page: int
+    pages: int
+    average_rating: float
+

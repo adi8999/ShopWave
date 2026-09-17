@@ -18,6 +18,7 @@ A production-ready e-commerce web application featuring user authentication, sho
   - Browse products across multiple categories (Electronics, Clothing, Books, Home).
   - Search by title, filter by category, and sort by price range.
   - Interactive product detail pages with real-time stock availability.
+  - **Customer Reviews & Ratings**: Submit 1–5 star reviews with verified purchase detection (automatically checks user order history for the item) and real-time average score updates.
 - **Cart & Order Checkout**:
   - Persistent shopping cart synced with backend API per user.
   - Stripe payment processing integration with card validation.
