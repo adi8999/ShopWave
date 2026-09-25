@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ShoppingCart, User, LogOut, Menu, X, Package, Zap, Shield, Sparkles } from 'lucide-react'
+import { ShoppingCart, User, LogOut, Menu, X, Package, Zap, Shield, Sparkles, Heart } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
+import { useWishlist } from '../context/WishlistContext'
 import './Navbar.css'
 
 export default function Navbar() {
   const { user, logout, isLoggedIn } = useAuth()
   const { totalItems } = useCart()
+  const { totalWishlist } = useWishlist()
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -49,7 +51,12 @@ export default function Navbar() {
             <span>AI Assistant</span>
           </button>
           {isLoggedIn && (
-            <Link to="/orders" className={`nav-link ${isActive('/orders') ? 'active' : ''}`} onClick={() => setMobileOpen(false)}>My Orders</Link>
+            <>
+              <Link to="/wishlist" className={`nav-link ${isActive('/wishlist') ? 'active' : ''}`} onClick={() => setMobileOpen(false)}>
+                Wishlist {totalWishlist > 0 && <span className="nav-badge-pill">{totalWishlist}</span>}
+              </Link>
+              <Link to="/orders" className={`nav-link ${isActive('/orders') ? 'active' : ''}`} onClick={() => setMobileOpen(false)}>My Orders</Link>
+            </>
           )}
           {user?.is_admin && (
             <Link to="/admin" className={`nav-link admin-nav-link ${isActive('/admin') ? 'active' : ''}`} onClick={() => setMobileOpen(false)}>
@@ -88,6 +95,9 @@ export default function Navbar() {
                     <p className="user-dropdown-email">{user?.email}</p>
                   </div>
                   <div className="user-dropdown-divider" />
+                  <Link to="/wishlist" className="user-dropdown-item" onClick={() => setUserMenuOpen(false)}>
+                    <Heart size={15} /> My Wishlist
+                  </Link>
                   <Link to="/orders" className="user-dropdown-item" onClick={() => setUserMenuOpen(false)}>
                     <Package size={15} /> My Orders
                   </Link>

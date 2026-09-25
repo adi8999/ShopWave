@@ -18,6 +18,7 @@ A production-ready e-commerce web application featuring user authentication, sho
   - Browse products across multiple categories (Electronics, Clothing, Books, Home).
   - Search by title, filter by category, and sort by price range.
   - Interactive product detail pages with real-time stock availability.
+  - **Wishlist & Save for Later**: 1-click heart toggle on product cards, dedicated `/wishlist` management page, and streamlined "Move to Cart" workflow.
 - **Cart & Order Checkout**:
   - Persistent shopping cart synced with backend API per user.
   - Stripe payment processing integration with card validation.

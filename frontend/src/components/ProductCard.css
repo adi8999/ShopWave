@@ -38,7 +38,44 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  pointer-events: none;
 }
+
+.product-card-badges-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.product-card-wishlist-btn {
+  pointer-events: auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(18, 18, 26, 0.82);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.product-card-wishlist-btn:hover {
+  background: rgba(236, 72, 153, 0.15);
+  color: #ec4899;
+  transform: scale(1.15);
+}
+
+.product-card-wishlist-btn.active {
+  background: rgba(236, 72, 153, 0.22);
+  border-color: rgba(236, 72, 153, 0.45);
+  color: #ec4899;
+}
+
 
 .product-card-body {
   padding: 16px;
