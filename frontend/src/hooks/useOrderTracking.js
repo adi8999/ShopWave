@@ -23,7 +23,7 @@ export function useOrderTracking(orderId) {
   const connect = useCallback(() => {
     if (!orderId) return
 
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('sw_token')
     if (!token) return
 
     // Build WebSocket URL
