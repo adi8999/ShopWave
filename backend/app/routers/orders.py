@@ -1,4 +1,5 @@
 import json
+import os
 from typing import List, Dict, Set
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
@@ -61,22 +62,21 @@ async def order_tracking_ws(
     from app import auth as auth_module
 
     # Manually validate JWT from query param
+    from jose import jwt as jose_jwt, JWTError
+    secret = os.getenv("SECRET_KEY", "")
     try:
-        user = auth_module.get_current_user.__wrapped__(token=token, db=db)  # type: ignore[attr-defined]
-    except Exception:
-        # Fallback manual decode
-        try:
-            from jose import jwt as jose_jwt
-            import os
-            payload = jose_jwt.decode(token, os.getenv("SECRET_KEY", ""), algorithms=["HS256"])
-            user_id = payload.get("sub")
-            user = db.query(models.User).filter(models.User.id == int(user_id)).first()
-            if not user:
-                await websocket.close(code=4001)
-                return
-        except Exception:
+        payload = jose_jwt.decode(token, secret, algorithms=["HS256"])
+        user_id = payload.get("sub")
+        if not user_id:
             await websocket.close(code=4001)
             return
+        user = db.query(models.User).filter(models.User.id == int(user_id)).first()
+        if not user:
+            await websocket.close(code=4001)
+            return
+    except (JWTError, Exception):
+        await websocket.close(code=4001)
+        return
 
     # Verify the order belongs to this user (or user is admin)
     order = (
@@ -130,9 +130,22 @@ def checkout(
             )
         total += product.price * item.quantity
 
-    # Set status based on whether Stripe payment is already confirmed
-    initial_status = "processing" if checkout_data.payment_intent_id else "pending_payment"
-    initial_payment_status = "paid" if checkout_data.payment_intent_id else "pending"
+    # Verify payment_intent_id with Stripe (never trust client-provided status)
+    initial_status = "pending_payment"
+    initial_payment_status = "pending"
+    if checkout_data.payment_intent_id:
+        stripe_key = os.getenv("STRIPE_SECRET_KEY", "")
+        if stripe_key:
+            try:
+                import stripe as _stripe
+                _stripe.api_key = stripe_key
+                intent = _stripe.PaymentIntent.retrieve(checkout_data.payment_intent_id)
+                if intent["status"] == "succeeded":
+                    initial_status = "processing"
+                    initial_payment_status = "paid"
+            except Exception:
+                # Could not verify — treat as pending
+                pass
 
     # Create order
     order = models.Order(
@@ -149,7 +162,7 @@ def checkout(
     db.add(order)
     db.flush()  # get order.id
 
-    # Create order items and deduct stock
+    # Create order items and atomically deduct stock
     for item in cart_items:
         product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
         order_item = models.OrderItem(
@@ -159,7 +172,24 @@ def checkout(
             unit_price=product.price,
         )
         db.add(order_item)
-        product.stock -= item.quantity
+        # Atomic stock decrement — prevents race conditions
+        rows_updated = (
+            db.query(models.Product)
+            .filter(
+                models.Product.id == item.product_id,
+                models.Product.stock >= item.quantity,
+            )
+            .update(
+                {models.Product.stock: models.Product.stock - item.quantity},
+                synchronize_session="fetch",
+            )
+        )
+        if rows_updated == 0:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=f"Insufficient stock for product #{item.product_id}. Please refresh your cart.",
+            )
 
     # Clear cart
     db.query(models.CartItem).filter(models.CartItem.user_id == current_user.id).delete()

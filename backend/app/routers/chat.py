@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from app import models
+from app.auth import get_optional_user
 from app.database import get_db
 from app.security.rate_limit import chat_limiter
 from app.security.sanitize import sanitize_ai_context
@@ -106,18 +107,30 @@ def execute_search_products(
     return items
 
 
-def execute_get_order_status(db: Session, order_id: int) -> Dict[str, Any]:
+def execute_get_order_status(
+    db: Session, order_id: int, user_id: Optional[int] = None
+) -> Dict[str, Any]:
     """
     Query the Order table to return live order status and items.
+    When user_id is provided, the query is scoped to that user's orders only
+    to prevent cross-user data leaks.
     """
     try:
         oid = int(order_id)
     except (ValueError, TypeError):
         return {"error": f"Invalid order ID format: {order_id}"}
 
-    order = db.query(models.Order).filter(models.Order.id == oid).first()
+    q = db.query(models.Order).filter(models.Order.id == oid)
+    if user_id is not None:
+        q = q.filter(models.Order.user_id == user_id)
+    order = q.first()
+
     if not order:
-        # Fallback to the latest order in the database for demonstration if available
+        if user_id is not None:
+            return {
+                "error": f"Order #{order_id} was not found in your account. Please check the order number or view your orders page."
+            }
+        # Guest fallback — show latest order for demo only
         latest_order = db.query(models.Order).order_by(models.Order.id.desc()).first()
         if latest_order:
             order = latest_order
@@ -213,7 +226,9 @@ TOOL_DEFINITIONS_OPENAI = [
 ]
 
 
-def dispatch_tool(tool_name: str, args: Dict[str, Any], db: Session) -> Any:
+def dispatch_tool(
+    tool_name: str, args: Dict[str, Any], db: Session, user_id: Optional[int] = None
+) -> Any:
     """Execute the local database query corresponding to the requested tool."""
     if tool_name == "search_products":
         return execute_search_products(
@@ -224,7 +239,7 @@ def dispatch_tool(tool_name: str, args: Dict[str, Any], db: Session) -> Any:
         )
     elif tool_name == "get_order_status":
         order_id = args.get("order_id", 1)
-        return execute_get_order_status(db=db, order_id=order_id)
+        return execute_get_order_status(db=db, order_id=order_id, user_id=user_id)
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -236,6 +251,7 @@ def run_gemini_native_loop(
     history: List[ChatMessage],
     db: Session,
     gemini_api_key: str,
+    user_id: Optional[int] = None,
 ) -> ChatResponse:
     """
     Direct Google Gemini tool calling using the google-genai SDK.
@@ -257,7 +273,7 @@ def run_gemini_native_loop(
 
     def get_order_status(order_id: int) -> str:
         """Get the current shipping and fulfillment status for an order ID."""
-        res = execute_get_order_status(db, order_id=order_id)
+        res = execute_get_order_status(db, order_id=order_id, user_id=user_id)
         return json.dumps(res)
 
     contents = []
@@ -293,7 +309,7 @@ def run_gemini_native_loop(
                     if hasattr(part, "function_call") and part.function_call:
                         fn_name = part.function_call.name
                         fn_args = dict(part.function_call.args or {})
-                        tool_result = dispatch_tool(fn_name, fn_args, db)
+                        tool_result = dispatch_tool(fn_name, fn_args, db, user_id=user_id)
                         collected_tool_calls.append(
                             ToolCallInfo(name=fn_name, arguments=fn_args, result=tool_result)
                         )
@@ -317,6 +333,7 @@ def run_openai_compatible_loop(
     api_key: str,
     base_url: Optional[str] = None,
     model: str = "google/gemini-3.7-flash",
+    user_id: Optional[int] = None,
 ) -> ChatResponse:
     """
     Multi-turn tool calling loop for OpenAI & OpenRouter.
@@ -383,7 +400,7 @@ def run_openai_compatible_loop(
             except Exception:
                 fn_args = {}
 
-            tool_result = dispatch_tool(fn_name, fn_args, db)
+            tool_result = dispatch_tool(fn_name, fn_args, db, user_id=user_id)
 
             collected_tool_calls.append(
                 ToolCallInfo(name=fn_name, arguments=fn_args, result=tool_result)
@@ -410,7 +427,9 @@ def run_openai_compatible_loop(
     )
 
 
-def rule_based_fallback(message: str, db: Session) -> ChatResponse:
+def rule_based_fallback(
+    message: str, db: Session, user_id: Optional[int] = None
+) -> ChatResponse:
     """
     Local database intelligence fallback if external AI endpoints are unreachable.
     """
@@ -422,7 +441,7 @@ def rule_based_fallback(message: str, db: Session) -> ChatResponse:
     order_match = re.search(r"(?:order|#)\s*(\d+)", msg_lower)
     if order_match or "track" in msg_lower or "order" in msg_lower:
         oid = int(order_match.group(1)) if order_match else 1
-        res = execute_get_order_status(db, oid)
+        res = execute_get_order_status(db, oid, user_id=user_id)
         collected_tool_calls.append(
             ToolCallInfo(name="get_order_status", arguments={"order_id": oid}, result=res)
         )
@@ -485,6 +504,7 @@ def chat_endpoint(
     http_request: Request,
     db: Session = Depends(get_db),
     _rl: None = Depends(chat_limiter),
+    current_user: Optional[models.User] = Depends(get_optional_user),
 ):
     """
     POST /api/chat
@@ -502,6 +522,8 @@ def chat_endpoint(
             detail="Your message contains disallowed content. Please rephrase and try again.",
         )
 
+    uid: Optional[int] = current_user.id if current_user else None
+
     gemini_key = os.getenv("GEMINI_API_KEY")
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -514,6 +536,7 @@ def chat_endpoint(
                 history=payload.history,
                 db=db,
                 gemini_api_key=gemini_key.strip(),
+                user_id=uid,
             )
         except Exception as e:
             logger.warning(f"Gemini API tool loop failed: {e}. Trying fallback provider...")
@@ -528,6 +551,7 @@ def chat_endpoint(
                 api_key=openrouter_key.strip(),
                 base_url="https://openrouter.ai/api/v1",
                 model=os.getenv("OPENROUTER_MODEL", "google/gemini-3.7-flash"),
+                user_id=uid,
             )
         except Exception as e:
             logger.warning(f"OpenRouter Gemini tool loop failed: {e}. Trying fallback...")
@@ -541,9 +565,10 @@ def chat_endpoint(
                 db=db,
                 api_key=openai_key.strip(),
                 model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+                user_id=uid,
             )
         except Exception as e:
             logger.warning(f"OpenAI tool loop failed: {e}. Falling back to database engine...")
 
     # Strategy 4: Local Database Intelligence Fallback
-    return rule_based_fallback(request.message, db)
+    return rule_based_fallback(safe_message, db, user_id=uid)

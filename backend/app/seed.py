@@ -3,6 +3,7 @@ Seed script — populates the database with a diverse product catalog.
 Usage: python -m app.seed
        python -m app.seed --force   (clears existing products first)
 """
+import os
 import sys
 from app.database import SessionLocal, engine
 from app import models
@@ -274,27 +275,51 @@ def seed(force: bool = False):
 
         # Ensure admin user exists
         from app.auth import hash_password
-        admin_email = "admin@shopwave.com"
+        admin_email = os.getenv("ADMIN_EMAIL", "admin@shopwave.com")
+        admin_password = os.getenv("ADMIN_PASSWORD", "")
+        if not admin_password:
+            print(
+                "⚠️  ADMIN_PASSWORD env var not set. Using a generated placeholder — "
+                "change it immediately via the admin panel or re-seed with ADMIN_PASSWORD set."
+            )
+            import secrets
+            admin_password = secrets.token_urlsafe(16)
         admin = db.query(models.User).filter(models.User.email == admin_email).first()
         if not admin:
             admin_user = models.User(
                 name="Admin",
                 email=admin_email,
-                hashed_password=hash_password("Admin@123"),
+                hashed_password=hash_password(admin_password),
                 is_admin=True,
             )
             db.add(admin_user)
             db.commit()
-            print("✅ Admin user created: admin@shopwave.com / Admin@123")
+            print(f"✅ Admin user created: {admin_email}")
         else:
             if not admin.is_admin:
                 admin.is_admin = True
                 db.commit()
-                print("✅ Existing admin@shopwave.com promoted to admin.")
+                print(f"✅ Existing {admin_email} promoted to admin.")
             else:
-                print("ℹ️  Admin user already exists.")
+                print(f"ℹ️  Admin user already exists ({admin_email}).")
+
+        # Ensure default coupons exist
+        if hasattr(models, "Coupon"):
+            DEFAULT_COUPONS = [
+                {"code": "SAVE10", "percent_off": 10.0, "is_active": True},
+                {"code": "WELCOME20", "percent_off": 20.0, "is_active": True},
+                {"code": "FREESHIP", "amount_off": 5.99, "is_active": True},
+            ]
+            for c_data in DEFAULT_COUPONS:
+                existing_c = db.query(models.Coupon).filter(models.Coupon.code == c_data["code"]).first()
+                if not existing_c:
+                    c = models.Coupon(**c_data)
+                    db.add(c)
+            db.commit()
+            print("✅ Default promotional coupons seeded: SAVE10 (10%), WELCOME20 (20%), FREESHIP ($5.99).")
     finally:
         db.close()
+
 
 
 if __name__ == "__main__":
