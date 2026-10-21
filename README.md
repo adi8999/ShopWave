@@ -117,8 +117,14 @@ Visit the app at: `http://localhost:5173`
 
 ## 👤 Admin Access
 
-- **Email**: `admin@shopwave.com`
-- **Password**: `Admin@123`
+Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `backend/.env`, then run:
+
+```bash
+python -m app.seed
+```
+
+The admin account is created from those environment variables — no default password is hardcoded.
+
 
 ---
 
