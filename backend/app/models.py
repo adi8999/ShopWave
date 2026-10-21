@@ -55,6 +55,8 @@ class Order(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     total_amount = Column(Float, nullable=False)
+    discount_amount = Column(Float, default=0.0)
+    coupon_code = Column(String(50), nullable=True)
     status = Column(String(50), default="pending_payment")  # pending_payment, processing, shipped, delivered, cancelled
     payment_status = Column(String(50), default="pending")  # pending, paid, failed
     stripe_payment_intent_id = Column(String(255), nullable=True)
@@ -79,3 +81,18 @@ class OrderItem(Base):
 
     order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")
+
+
+class Coupon(Base):
+    __tablename__ = "coupons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(50), unique=True, index=True, nullable=False)
+    percent_off = Column(Float, nullable=True)   # e.g. 10.0 for 10% off
+    amount_off = Column(Float, nullable=True)    # e.g. 5.0 for $5.00 off
+    expires_at = Column(DateTime, nullable=True)
+    max_uses = Column(Integer, nullable=True)
+    used_count = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
