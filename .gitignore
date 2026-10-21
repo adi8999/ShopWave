@@ -48,3 +48,4 @@ ShopWave*/
 *.zip
 coverage/
 .coverage
+PROJECT_CONTEXT.md
