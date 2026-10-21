@@ -13,11 +13,12 @@ from app import models
 
 # ── Secret key enforcement ────────────────────────────────────────────────────
 _SECRET_KEY = os.getenv("SECRET_KEY", "")
-if not _SECRET_KEY or len(_SECRET_KEY) < 16:
+if not _SECRET_KEY or len(_SECRET_KEY) < 32:
     raise RuntimeError(
-        "SECRET_KEY environment variable is missing or shorter than 16 characters. "
-        "Set a strong, random SECRET_KEY before starting the server."
+        "SECRET_KEY environment variable is missing or shorter than 32 characters. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
     )
+
 
 SECRET_KEY: str = _SECRET_KEY
 ALGORITHM = "HS256"

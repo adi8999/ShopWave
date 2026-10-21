@@ -15,13 +15,11 @@ limiter = RateLimiter(requests=20, window_seconds=60)
 def checkout(request: Request, _=Depends(limiter)):
     ...
 """
-from __future__ import annotations
-
 import os
 import time
 import threading
 from collections import defaultdict, deque
-from typing import Deque
+from typing import Deque, Dict, Optional
 
 import redis
 from fastapi import Depends, HTTPException, Request, status

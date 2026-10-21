@@ -36,13 +36,34 @@ def create_checkout_session(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    # Amount in cents
-    amount_cents = int(round(order.total_amount * 100))
+    # Calculate optional coupon discount
+    discount_amount = 0.0
+    if payload.coupon_code:
+        clean_code = payload.coupon_code.strip().upper()
+        coupon = db.query(models.Coupon).filter(models.Coupon.code == clean_code, models.Coupon.is_active == True).first()
+        if coupon:
+            if coupon.percent_off:
+                discount_amount = round(order.total_amount * (coupon.percent_off / 100.0), 2)
+            elif coupon.amount_off:
+                discount_amount = round(min(order.total_amount, coupon.amount_off), 2)
+
+            order.coupon_code = clean_code
+            order.discount_amount = discount_amount
+            coupon.used_count += 1
+
+    # Amount in cents (Stripe requires minimum $0.50 charge)
+    final_amount = max(0.50, round(order.total_amount - discount_amount, 2))
+    amount_cents = int(round(final_amount * 100))
 
     intent = stripe.PaymentIntent.create(
         amount=amount_cents,
         currency="usd",
-        metadata={"order_id": order.id, "user_id": current_user.id},
+        metadata={
+            "order_id": order.id,
+            "user_id": current_user.id,
+            "coupon_code": order.coupon_code or "",
+            "discount_amount": str(discount_amount),
+        },
     )
 
     # Save PaymentIntent ID on the order
@@ -54,8 +75,10 @@ def create_checkout_session(
         client_secret=intent["client_secret"],
         payment_intent_id=intent["id"],
         amount=amount_cents,
+        discount_amount=discount_amount,
         publishable_key=STRIPE_PUBLISHABLE_KEY,
     )
+
 
 
 # ─── Stripe Webhook ───────────────────────────────────────────────────────────

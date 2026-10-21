@@ -171,12 +171,14 @@ class ProductPage(BaseModel):
 
 class PaymentIntentCreate(BaseModel):
     order_id: int
+    coupon_code: Optional[str] = None
 
 
 class PaymentIntentResponse(BaseModel):
     client_secret: str
     payment_intent_id: str
     amount: int  # in cents
+    discount_amount: float = 0.0
     publishable_key: str
 
 
@@ -186,3 +188,43 @@ class CheckoutWithPayment(BaseModel):
     shipping_city: str
     shipping_zip: str
     payment_intent_id: Optional[str] = None
+    coupon_code: Optional[str] = None
+
+
+# ─── Coupons ─────────────────────────────────────────────────────────────────
+
+class CouponCreate(BaseModel):
+    code: str
+    percent_off: Optional[float] = None
+    amount_off: Optional[float] = None
+    expires_at: Optional[datetime] = None
+    max_uses: Optional[int] = None
+    is_active: bool = True
+
+
+class CouponOut(BaseModel):
+    id: int
+    code: str
+    percent_off: Optional[float] = None
+    amount_off: Optional[float] = None
+    expires_at: Optional[datetime] = None
+    max_uses: Optional[int] = None
+    used_count: int
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CouponValidateRequest(BaseModel):
+    code: str
+    subtotal: float
+
+
+class CouponValidateResponse(BaseModel):
+    valid: bool
+    message: str
+    code: Optional[str] = None
+    discount_amount: float = 0.0
+    final_total: float
+

@@ -279,29 +279,28 @@ def seed(force: bool = False):
         admin_password = os.getenv("ADMIN_PASSWORD", "")
         if not admin_password:
             print(
-                "⚠️  ADMIN_PASSWORD env var not set. Using a generated placeholder — "
-                "change it immediately via the admin panel or re-seed with ADMIN_PASSWORD set."
+                "⚠️  ADMIN_PASSWORD env var not set — skipping admin user creation.\n"
+                "    Set ADMIN_PASSWORD in backend/.env and re-run: python -m app.seed"
             )
-            import secrets
-            admin_password = secrets.token_urlsafe(16)
-        admin = db.query(models.User).filter(models.User.email == admin_email).first()
-        if not admin:
-            admin_user = models.User(
-                name="Admin",
-                email=admin_email,
-                hashed_password=hash_password(admin_password),
-                is_admin=True,
-            )
-            db.add(admin_user)
-            db.commit()
-            print(f"✅ Admin user created: {admin_email}")
         else:
-            if not admin.is_admin:
-                admin.is_admin = True
+            admin = db.query(models.User).filter(models.User.email == admin_email).first()
+            if not admin:
+                admin_user = models.User(
+                    name="Admin",
+                    email=admin_email,
+                    hashed_password=hash_password(admin_password),
+                    is_admin=True,
+                )
+                db.add(admin_user)
                 db.commit()
-                print(f"✅ Existing {admin_email} promoted to admin.")
+                print(f"✅ Admin user created: {admin_email}")
             else:
-                print(f"ℹ️  Admin user already exists ({admin_email}).")
+                if not admin.is_admin:
+                    admin.is_admin = True
+                    db.commit()
+                    print(f"✅ Existing {admin_email} promoted to admin.")
+                else:
+                    print(f"ℹ️  Admin user already exists ({admin_email}).")
 
         # Ensure default coupons exist
         if hasattr(models, "Coupon"):
