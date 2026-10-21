@@ -5,6 +5,7 @@ Usage: python -m app.seed
 """
 import os
 import sys
+from sqlalchemy.exc import IntegrityError
 from app.database import SessionLocal, engine
 from app import models
 
@@ -267,11 +268,15 @@ def seed(force: bool = False):
                 db.commit()
                 print(f"🗑️  Cleared {existing} existing products (and dependent cart/order items).")
 
-            for p in PRODUCTS:
-                product = models.Product(**p)
-                db.add(product)
-            db.commit()
-            print(f"✅ Seeded {len(PRODUCTS)} products successfully.")
+            try:
+                for p in PRODUCTS:
+                    product = models.Product(**p)
+                    db.add(product)
+                db.commit()
+                print(f"✅ Seeded {len(PRODUCTS)} products successfully.")
+            except IntegrityError:
+                db.rollback()
+                print("ℹ️  Products already seeded concurrently by another process.")
 
         # Ensure admin user exists
         from app.auth import hash_password
@@ -283,24 +288,52 @@ def seed(force: bool = False):
                 "    Set ADMIN_PASSWORD in backend/.env and re-run: python -m app.seed"
             )
         else:
-            admin = db.query(models.User).filter(models.User.email == admin_email).first()
-            if not admin:
-                admin_user = models.User(
-                    name="Admin",
-                    email=admin_email,
-                    hashed_password=hash_password(admin_password),
-                    is_admin=True,
-                )
-                db.add(admin_user)
-                db.commit()
-                print(f"✅ Admin user created: {admin_email}")
-            else:
-                if not admin.is_admin:
-                    admin.is_admin = True
+            try:
+                admin = db.query(models.User).filter(models.User.email == admin_email).first()
+                if not admin:
+                    admin_user = models.User(
+                        name="Admin",
+                        email=admin_email,
+                        hashed_password=hash_password(admin_password),
+                        is_admin=True,
+                    )
+                    db.add(admin_user)
                     db.commit()
-                    print(f"✅ Existing {admin_email} promoted to admin.")
+                    print(f"✅ Admin user created: {admin_email}")
                 else:
-                    print(f"ℹ️  Admin user already exists ({admin_email}).")
+                    if not admin.is_admin:
+                        admin.is_admin = True
+                        db.commit()
+                        print(f"✅ Existing {admin_email} promoted to admin.")
+                    else:
+                        print(f"ℹ️  Admin user already exists ({admin_email}).")
+            except IntegrityError:
+                db.rollback()
+                print(f"ℹ️  Admin user already created concurrently ({admin_email}).")
+
+        # Ensure demo customer user exists
+        demo_email = os.getenv("DEMO_USER_EMAIL", "demo@shopwave.com")
+        demo_password = os.getenv("DEMO_USER_PASSWORD", "")
+        if not demo_password:
+            print("ℹ️  DEMO_USER_PASSWORD env var not set — skipping demo user creation.")
+        else:
+            try:
+                demo_user = db.query(models.User).filter(models.User.email == demo_email).first()
+                if not demo_user:
+                    user = models.User(
+                        name="Demo Shopper",
+                        email=demo_email,
+                        hashed_password=hash_password(demo_password),
+                        is_admin=False,
+                    )
+                    db.add(user)
+                    db.commit()
+                    print(f"✅ Demo user created: {demo_email}")
+                else:
+                    print(f"ℹ️  Demo user already exists ({demo_email}).")
+            except IntegrityError:
+                db.rollback()
+                print(f"ℹ️  Demo user already created concurrently ({demo_email}).")
 
         # Ensure default coupons exist
         if hasattr(models, "Coupon"):
@@ -309,13 +342,17 @@ def seed(force: bool = False):
                 {"code": "WELCOME20", "percent_off": 20.0, "is_active": True},
                 {"code": "FREESHIP", "amount_off": 5.99, "is_active": True},
             ]
-            for c_data in DEFAULT_COUPONS:
-                existing_c = db.query(models.Coupon).filter(models.Coupon.code == c_data["code"]).first()
-                if not existing_c:
-                    c = models.Coupon(**c_data)
-                    db.add(c)
-            db.commit()
-            print("✅ Default promotional coupons seeded: SAVE10 (10%), WELCOME20 (20%), FREESHIP ($5.99).")
+            try:
+                for c_data in DEFAULT_COUPONS:
+                    existing_c = db.query(models.Coupon).filter(models.Coupon.code == c_data["code"]).first()
+                    if not existing_c:
+                        c = models.Coupon(**c_data)
+                        db.add(c)
+                db.commit()
+                print("✅ Default promotional coupons seeded: SAVE10 (10%), WELCOME20 (20%), FREESHIP ($5.99).")
+            except IntegrityError:
+                db.rollback()
+                print("ℹ️  Coupons already seeded concurrently by another process.")
     finally:
         db.close()
 
