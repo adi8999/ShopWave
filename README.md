@@ -1,6 +1,22 @@
 # ⚡ ShopWave — Full-Stack E-Commerce Platform
 
-A production-ready e-commerce web application featuring user authentication, shopping cart persistence, dynamic product catalog management, administrative CRUD & sales analytics dashboard, and an **AI-powered shopping assistant chatbot with Google Gemini tool calling**, deployed on **AWS EC2** and **AWS RDS (PostgreSQL)**.
+A production-ready full-stack e-commerce web application featuring user authentication, shopping cart persistence, dynamic product catalog management, administrative CRUD & sales analytics dashboard, and an **AI-powered shopping assistant chatbot with Google Gemini tool calling**.
+
+---
+
+## 🌐 Live Demo & Recruiter Preview
+
+- **Storefront (Vercel)**: `https://your-shopwave.vercel.app`
+- **Backend API (Render)**: `https://your-shopwave-backend.onrender.com`
+- **API Health Check**: `https://your-shopwave-backend.onrender.com/health`
+
+> ⏱️ **Free Tier Cold Start Notice**: The backend is hosted on Render's free tier. If the instance has spun down due to inactivity, the first request may take up to **50–60 seconds** to wake up. Subsequent requests will respond instantly.
+
+### 🔑 Demo Accounts for Evaluators
+| Role | Email | Password | Permissions & Features |
+|---|---|---|---|
+| **Demo Customer** | `demo@shopwave.com` | `DemoPass123!` *(placeholder)* | Browse catalog, persistent cart, coupon code (`SAVE10`), mock Stripe checkout, live Gemini chat assistant |
+| **Store Admin** | `admin@shopwave.com` | `AdminPass123!` *(placeholder)* | Access `/admin` dashboard, catalog CRUD, manage order statuses, live sales analytics |
 
 ---
 
@@ -107,9 +123,63 @@ Visit the app at: `http://localhost:5173`
 
 ---
 
-## ☁️ AWS Single-Server Deployment Guide
+## 🚀 Free Tier Deployment (Neon + Render + Vercel)
 
-ShopWave is configured for single-server production deployment on **AWS EC2 (Ubuntu 22.04 / 24.04)** paired with an **AWS RDS PostgreSQL** managed database.
+ShopWave can be deployed 100% free with automated CI/CD for recruiter portfolios:
+
+```
+Vercel (React Frontend) ──► Render (FastAPI Web Service) ──► Neon (Serverless Postgres)
+```
+
+### 1. Database: Neon (Serverless PostgreSQL)
+1. Sign up for free at [neon.tech](https://neon.tech) and create a database (e.g. `shopwave`).
+2. Copy the connection string from your Neon dashboard:
+   ```
+   postgresql://user:password@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require
+   ```
+   *(Both `postgresql://` and `postgres://` formats are automatically supported).*
+
+### 2. Backend: Render (FastAPI Web Service)
+1. Sign up at [render.com](https://render.com) and create a **New Web Service** linked to your ShopWave repository.
+2. Select branch `free-deploy` (or `main`) and configure:
+   - **Root Directory**: `backend`
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt && python -m app.seed`
+   - **Start Command**: `gunicorn main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT`
+   - **Health Check Path**: `/health`
+   - **Plan**: `Free`
+3. Set the following **Environment Variables** in Render's dashboard:
+   | Key | Example Value | Description |
+   |---|---|---|
+   | `DATABASE_URL` | `postgresql://user:pass@ep-xyz.../neondb?sslmode=require` | Your Neon database connection URI |
+   | `SECRET_KEY` | `python3 -c "import secrets; print(secrets.token_hex(32))"` | 32+ char secret for JWT auth signing |
+   | `ALLOWED_ORIGINS` | `https://your-shopwave.vercel.app,http://localhost:5173` | Allowed frontend origins for CORS |
+   | `ADMIN_EMAIL` | `admin@shopwave.com` | Email for store administrator |
+   | `ADMIN_PASSWORD` | `AdminPass123!` | Password for store administrator |
+   | `DEMO_USER_EMAIL` | `demo@shopwave.com` | Email for demo customer account |
+   | `DEMO_USER_PASSWORD` | `DemoPass123!` | Password for demo customer account |
+   | `STRIPE_SECRET_KEY` | `sk_test_...` | Stripe test secret key |
+   | `STRIPE_PUBLISHABLE_KEY` | `pk_test_...` | Stripe test publishable key |
+   | `GEMINI_API_KEY` | `AIzaSy...` | Free API key from Google AI Studio |
+
+### 3. Frontend: Vercel (React 19 + Vite)
+1. Sign up at [vercel.com](https://vercel.com) and click **Add New Project** -> import your GitHub repository.
+2. Configure settings:
+   - **Framework Preset**: `Vite`
+   - **Root Directory**: `frontend`
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+3. Add Environment Variable:
+   | Key | Value |
+   |---|---|
+   | `VITE_API_URL` | Your Render web service URL (e.g. `https://your-shopwave-backend.onrender.com` — **no trailing slash**) |
+4. Click **Deploy**. Vercel uses the included `frontend/vercel.json` to handle client-side routing rewrites (`/* -> /index.html`) so refreshing routes like `/cart`, `/admin`, or `/orders` works flawlessly.
+
+---
+
+## ☁️ AWS Single-Server Deployment Guide (Alternative)
+
+ShopWave is also configured for single-server production deployment on **AWS EC2 (Ubuntu 22.04 / 24.04)** paired with an **AWS RDS PostgreSQL** managed database.
 
 ### 🏗️ Production Architecture
 - **Nginx (Reverse Proxy)**:

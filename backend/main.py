@@ -46,6 +46,13 @@ def root():
         "docs": "/docs",
     }
 
+
+@app.get("/health")
+def health():
+    """Lightweight health check endpoint for monitoring (Render, UptimeRobot, etc.) without hitting the DB."""
+    return {"status": "ok"}
+
+
 # NOTE: seed() is intentionally NOT called on startup.
 # Gunicorn starts 2 workers simultaneously — running seed on startup creates
 # a race condition. Run seeding manually once before starting gunicorn:
