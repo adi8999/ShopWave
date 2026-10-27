@@ -6,11 +6,9 @@ A production-ready full-stack e-commerce web application featuring user authenti
 
 ## 🌐 Live Demo & Recruiter Preview
 
-- **Storefront (Vercel)**: `https://your-shopwave.vercel.app`
-- **Backend API (Render)**: `https://your-shopwave-backend.onrender.com`
-- **API Health Check**: `https://your-shopwave-backend.onrender.com/health`
-
-> ⏱️ **Free Tier Cold Start Notice**: The backend is hosted on Render's free tier. If the instance has spun down due to inactivity, the first request may take up to **50–60 seconds** to wake up. Subsequent requests will respond instantly.
+- **🚀 Live Storefront**: [https://boundary-infectious-gold-crossing.trycloudflare.com](https://boundary-infectious-gold-crossing.trycloudflare.com)
+- **🛍️ API Catalog Endpoint**: [https://boundary-infectious-gold-crossing.trycloudflare.com/api/products](https://boundary-infectious-gold-crossing.trycloudflare.com/api/products)
+- **💚 API Health Check**: [https://boundary-infectious-gold-crossing.trycloudflare.com/health](https://boundary-infectious-gold-crossing.trycloudflare.com/health)
 
 ### 🔑 Demo Accounts for Evaluators
 | Role | Email | Password | Permissions & Features |
