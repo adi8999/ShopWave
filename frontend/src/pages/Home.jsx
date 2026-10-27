@@ -25,8 +25,9 @@ export default function Home() {
 
   useEffect(() => {
     client.get('/products?limit=8').then(({ data }) => {
-      setFeatured(data.slice(0, 8))
-    }).finally(() => setLoading(false))
+      const items = Array.isArray(data) ? data : (data?.items || [])
+      setFeatured(items.slice(0, 8))
+    }).catch(() => setFeatured([])).finally(() => setLoading(false))
   }, [])
 
   return (
