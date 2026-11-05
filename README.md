@@ -6,9 +6,10 @@ A production-ready full-stack e-commerce web application featuring user authenti
 
 ## 🌐 Live Demo & Recruiter Preview
 
-- **🚀 Live Storefront**: [https://boundary-infectious-gold-crossing.trycloudflare.com](https://boundary-infectious-gold-crossing.trycloudflare.com)
-- **🛍️ API Catalog Endpoint**: [https://boundary-infectious-gold-crossing.trycloudflare.com/api/products](https://boundary-infectious-gold-crossing.trycloudflare.com/api/products)
-- **💚 API Health Check**: [https://boundary-infectious-gold-crossing.trycloudflare.com/health](https://boundary-infectious-gold-crossing.trycloudflare.com/health)
+- **🚀 Live Storefront**: [https://themselves-industry-admission-adam.trycloudflare.com](https://themselves-industry-admission-adam.trycloudflare.com)
+- **📖 Interactive API Docs (Swagger UI)**: [https://themselves-industry-admission-adam.trycloudflare.com/docs](https://themselves-industry-admission-adam.trycloudflare.com/docs)
+- **🛍️ Backend API Root**: [https://themselves-industry-admission-adam.trycloudflare.com/api](https://themselves-industry-admission-adam.trycloudflare.com/api)
+- **💚 API Health Check**: [https://themselves-industry-admission-adam.trycloudflare.com/health](https://themselves-industry-admission-adam.trycloudflare.com/health)
 
 ### 🔑 Demo Accounts for Evaluators
 | Role | Email | Password | Permissions & Features |

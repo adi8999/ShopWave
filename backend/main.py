@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.database import engine
 from app import models
@@ -40,17 +41,34 @@ app.include_router(coupons.router)
 
 
 @app.get("/")
+@app.get("/api")
+@app.get("/api/")
 def root():
     return {
         "message": "ShopWave API is running 🛍️",
         "docs": "/docs",
+        "health": "/health",
+        "endpoints": {
+            "products": "/api/products",
+            "auth": "/api/auth",
+            "cart": "/api/cart",
+            "orders": "/api/orders",
+            "coupons": "/api/coupons",
+            "chat": "/api/chat",
+        },
     }
 
 
 @app.get("/health")
+@app.get("/api/health")
 def health():
-    """Lightweight health check endpoint for monitoring (Render, UptimeRobot, etc.) without hitting the DB."""
+    """Lightweight health check endpoint for monitoring without hitting the DB."""
     return {"status": "ok"}
+
+
+@app.get("/api/docs", include_in_schema=False)
+def api_docs():
+    return RedirectResponse(url="/docs")
 
 
 # NOTE: seed() is intentionally NOT called on startup.

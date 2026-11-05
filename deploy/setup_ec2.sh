@@ -138,8 +138,8 @@ server {
         try_files \$uri \$uri/ /index.html;
     }
 
-    # Proxy /api/ to FastAPI backend
-    location /api/ {
+    # Proxy /api/, /docs, /openapi.json, /health to FastAPI backend
+    location ~ ^/(api|docs|openapi\.json|health) {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
