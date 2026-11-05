@@ -2,6 +2,9 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from jose import JWTError, jwt
 import bcrypt
 from fastapi import Depends, HTTPException, status

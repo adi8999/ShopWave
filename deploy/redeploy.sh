@@ -36,16 +36,21 @@ echo "✅ Backend dependencies installed."
 sudo systemctl restart "$SERVICE_NAME"
 echo "✅ Backend service restarted."
 
-# ── 4. Copy frontend dist (if present) ────────────────────────────────────────
-# Build the frontend locally, then push the dist/ folder to EC2, or
-# build it on the server (requires Node.js to be installed).
-if [[ -d "$APP_DIR/frontend/dist" ]]; then
+# ── 4. Build and copy frontend dist ──────────────────────────────────────────
+if [[ -d "$APP_DIR/frontend" ]] && command -v npm &> /dev/null; then
+  echo "📦 Updating and building frontend..."
+  cd "$APP_DIR/frontend"
+  npm install --quiet
+  npm run build
+  sudo mkdir -p "$FRONTEND_DIST"
+  sudo cp -r "$APP_DIR/frontend/dist/." "$FRONTEND_DIST/"
+  echo "✅ Frontend built and copied to $FRONTEND_DIST"
+elif [[ -d "$APP_DIR/frontend/dist" ]]; then
+  sudo mkdir -p "$FRONTEND_DIST"
   sudo cp -r "$APP_DIR/frontend/dist/." "$FRONTEND_DIST/"
   echo "✅ Frontend dist copied to $FRONTEND_DIST"
 else
   echo "⚠️  frontend/dist not found — skipping frontend update."
-  echo "   To build on server: cd $APP_DIR/frontend && npm ci && npm run build"
-  echo "   Then re-run this script."
 fi
 
 # ── 5. Reload Nginx (picks up any config changes) ─────────────────────────────

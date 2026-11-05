@@ -34,6 +34,13 @@ sudo apt-get install -y \
   nginx git curl libpq-dev \
   certbot python3-certbot-nginx
 
+# Install Node.js LTS (v20) for building the frontend if not already installed
+if ! command -v node &> /dev/null; then
+  echo "📦 Installing Node.js LTS..."
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+  sudo apt-get install -y nodejs
+fi
+
 # ── 2. Clone / pull repo ──────────────────────────────────────────────────────
 if [[ ! -d "$APP_DIR/.git" ]]; then
   echo "📥 Cloning repository..."
@@ -72,15 +79,20 @@ source venv/bin/activate
 python -m app.seed
 deactivate
 
-# ── 6. Serve frontend static files ───────────────────────────────────────────
+# ── 6. Build & serve frontend static files ───────────────────────────────────
 sudo mkdir -p "$FRONTEND_DIST"
-if [[ -d "$APP_DIR/frontend/dist" ]]; then
+if [[ -d "$APP_DIR/frontend" ]]; then
+  echo "📦 Building frontend with npm..."
+  cd "$APP_DIR/frontend"
+  npm install
+  npm run build
+  sudo cp -r "$APP_DIR/frontend/dist/." "$FRONTEND_DIST/"
+  echo "✅ Frontend built and copied to $FRONTEND_DIST"
+elif [[ -d "$APP_DIR/frontend/dist" ]]; then
   sudo cp -r "$APP_DIR/frontend/dist/." "$FRONTEND_DIST/"
   echo "✅ Frontend dist copied to $FRONTEND_DIST"
 else
-  echo "⚠️  frontend/dist not found. Build locally and scp, or run:"
-  echo "   cd $APP_DIR/frontend && npm install && npm run build"
-  echo "   sudo cp -r $APP_DIR/frontend/dist/. $FRONTEND_DIST/"
+  echo "⚠️  Neither frontend source nor frontend/dist found."
 fi
 
 # ── 7. Systemd service ────────────────────────────────────────────────────────
