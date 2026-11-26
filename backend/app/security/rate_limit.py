@@ -2,63 +2,61 @@
 app/security/rate_limit.py
 ──────────────────────────
 Redis-backed sliding-window rate limiter for FastAPI routes.
-Falls back to a thread-safe in-memory counter when Redis is unavailable
-so the server never crashes due to a missing cache layer.
-
-Usage
------
-from app.security.rate_limit import RateLimiter
-
-limiter = RateLimiter(requests=20, window_seconds=60)
-
-@router.post("/create-checkout-session")
-def checkout(request: Request, _=Depends(limiter)):
-    ...
+In development, falls back to a thread-safe in-memory counter when Redis is
+unavailable.
+In production (ENVIRONMENT=production), fails closed with HTTP 503 if Redis is
+unavailable so rate limits cannot be bypassed across Gunicorn workers.
 """
+import logging
 import os
-import time
 import threading
+import time
 from collections import defaultdict, deque
-from typing import Deque, Dict, Optional
+from typing import Deque
 
 import redis
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import HTTPException, Request, status
+
+logger = logging.getLogger(__name__)
+
+
+def is_production() -> bool:
+    return os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower() == "production"
+
+
+def _get_trusted_proxies() -> set[str]:
+    raw = os.getenv("TRUSTED_PROXIES", "127.0.0.1,::1")
+    return {p.strip() for p in raw.split(",") if p.strip()}
 
 
 # ── Redis Connection ──────────────────────────────────────────────────────────
 
 def _get_redis() -> redis.Redis | None:
-    """
-    Attempt to connect to Redis using REDIS_URL env var
-    (e.g. redis://localhost:6379 or a Redis Cloud / Upstash URL).
-    Returns None if the connection fails so callers can fall back gracefully.
-    """
     url = os.getenv("REDIS_URL", "redis://localhost:6379")
     try:
         client = redis.from_url(url, socket_connect_timeout=1, decode_responses=True)
         client.ping()
         return client
-    except Exception:
+    except Exception as exc:
+        if is_production():
+            logger.critical("CRITICAL: Redis unavailable in production: %s", exc)
         return None
 
 
 _redis_client: redis.Redis | None = _get_redis()
 
 
-# ── In-Memory Fallback ────────────────────────────────────────────────────────
+# ── In-Memory Fallback (dev/test only) ────────────────────────────────────────
 
 _mem_lock = threading.Lock()
-# key → deque of timestamps (float seconds)
 _mem_store: dict[str, Deque[float]] = defaultdict(deque)
 
 
 def _mem_is_allowed(key: str, max_requests: int, window: int) -> bool:
-    """Sliding-window check using an in-memory deque (thread-safe)."""
     now = time.time()
     cutoff = now - window
     with _mem_lock:
         dq = _mem_store[key]
-        # Evict expired timestamps
         while dq and dq[0] < cutoff:
             dq.popleft()
         if len(dq) >= max_requests:
@@ -91,57 +89,49 @@ end
 def _redis_is_allowed(
     r: redis.Redis, key: str, max_requests: int, window: int
 ) -> bool:
-    """Lua-atomic sliding-window check in Redis (precise, race-condition free)."""
     try:
         result = r.eval(
             _RATE_LIMIT_SCRIPT,
-            1,  # numkeys
+            1,
             key,
             time.time(),
             window,
             max_requests,
         )
         return bool(result)
-    except Exception:
-        # If Redis errors during eval, fail open (allow request) to avoid outage
+    except Exception as exc:
+        logger.error("Redis rate-limit eval error: %s", exc)
+        if is_production():
+            # Fail closed in production
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Rate limiting service unavailable.",
+            )
         return True
 
 
 # ── Public Dependency ─────────────────────────────────────────────────────────
 
-
 def _get_client_ip(request: Request) -> str:
-    """Extract real client IP, respecting X-Forwarded-For set by a trusted proxy."""
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # Use the first IP (original client) if the header contains a chain
-        return forwarded_for.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """
+    Extract real client IP.
+    Trust X-Forwarded-For ONLY when the immediate peer is a known trusted proxy
+    (e.g. local Nginx on 127.0.0.1 / ::1).
+    """
+    peer_ip = request.client.host if request.client else "unknown"
+    trusted = _get_trusted_proxies()
+    if peer_ip in trusted:
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            # Right-most untrusted IP or first client IP from trusted proxy
+            return forwarded_for.split(",")[0].strip()
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
+    return peer_ip
 
 
 class RateLimiter:
-    """
-    FastAPI dependency that enforces a sliding-window rate limit per client IP.
-
-    Parameters
-    ----------
-    requests : int
-        Maximum number of allowed requests within ``window_seconds``.
-    window_seconds : int
-        Duration of the sliding window in seconds.
-    key_prefix : str
-        Redis key prefix to namespace limits (e.g. ``"rl:checkout"``).
-
-    Example
-    -------
-    checkout_limiter = RateLimiter(requests=10, window_seconds=60, key_prefix="rl:checkout")
-    search_limiter   = RateLimiter(requests=30, window_seconds=60, key_prefix="rl:search")
-
-    @router.post("/create-checkout-session")
-    def checkout(request: Request, _=Depends(checkout_limiter)):
-        ...
-    """
-
     def __init__(
         self,
         requests: int = 20,
@@ -161,6 +151,14 @@ class RateLimiter:
                 _redis_client, redis_key, self.max_requests, self.window
             )
         else:
+            if is_production():
+                logger.critical(
+                    "CRITICAL: Blocking request in production because Redis rate-limiter is unavailable"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Security rate-limiting service unavailable.",
+                )
             allowed = _mem_is_allowed(redis_key, self.max_requests, self.window)
 
         if not allowed:
@@ -174,25 +172,26 @@ class RateLimiter:
             )
 
 
-# ── Pre-configured limiters (import and use directly) ────────────────────────
-
-#: Strict limiter for checkout — 10 requests / 60 s per IP
 checkout_limiter = RateLimiter(
     requests=10,
     window_seconds=60,
     key_prefix="rl:checkout",
 )
 
-#: Generous limiter for search — 60 requests / 60 s per IP
 search_limiter = RateLimiter(
     requests=60,
     window_seconds=60,
     key_prefix="rl:search",
 )
 
-#: Chat / AI limiter — 20 requests / 60 s per IP
 chat_limiter = RateLimiter(
     requests=20,
     window_seconds=60,
     key_prefix="rl:chat",
+)
+
+auth_limiter = RateLimiter(
+    requests=15,
+    window_seconds=60,
+    key_prefix="rl:auth",
 )

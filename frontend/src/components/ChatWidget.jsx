@@ -355,7 +355,7 @@ export default function ChatWidget() {
                                 {product.name}
                               </h4>
                               <div className="card-meta-row">
-                                <span className="card-price">${product.price.toFixed(2)}</span>
+                                <span className="card-price">${Number(product.price).toFixed(2)}</span>
                                 <span className="card-rating">
                                   <Star size={12} fill="#f59e0b" color="#f59e0b" />
                                   {product.rating}

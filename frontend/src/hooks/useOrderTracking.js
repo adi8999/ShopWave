@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-const WS_BASE = import.meta.env.VITE_WS_URL || `ws://${window.location.host}`
+const API_BASE = import.meta.env.VITE_API_URL || ''
+const WS_BASE = import.meta.env.VITE_WS_URL || `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
 
 /**
  * useOrderTracking(orderId)
- * Opens a WebSocket to /api/orders/ws/<orderId>?token=<jwt>
+ * Requests a short-lived single-use WebSocket ticket, then opens a WebSocket
+ * to /api/orders/ws/<orderId>?ticket=<ticket>.
  * Auto-reconnects with exponential backoff on disconnect.
  *
  * Returns: { status, paymentStatus, connected, lastUpdate }
@@ -18,17 +20,33 @@ export function useOrderTracking(orderId) {
   const wsRef = useRef(null)
   const retryRef = useRef(null)
   const retryCount = useRef(0)
+  const cancelledRef = useRef(false)
   const MAX_RETRIES = 8
 
-  const connect = useCallback(() => {
-    if (!orderId) return
+  const connect = useCallback(async () => {
+    if (!orderId || cancelledRef.current) return
 
     const token = localStorage.getItem('sw_token')
     if (!token) return
 
-    // Build WebSocket URL
-    const wsUrl = `${WS_BASE}/api/orders/ws/${orderId}?token=${token}`
+    let ticket
+    try {
+      const resp = await fetch(`${API_BASE}/api/orders/${orderId}/ws-ticket`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!resp.ok) return
+      const data = await resp.json()
+      ticket = data.ticket
+    } catch {
+      return
+    }
 
+    if (!ticket || cancelledRef.current) return
+
+    const wsUrl = `${WS_BASE}/api/orders/ws/${orderId}?ticket=${encodeURIComponent(ticket)}`
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
@@ -49,7 +67,7 @@ export function useOrderTracking(orderId) {
     ws.onclose = () => {
       setConnected(false)
       wsRef.current = null
-      if (retryCount.current < MAX_RETRIES) {
+      if (!cancelledRef.current && retryCount.current < MAX_RETRIES) {
         const delay = Math.min(1000 * 2 ** retryCount.current, 30000)
         retryCount.current++
         retryRef.current = setTimeout(connect, delay)
@@ -62,8 +80,10 @@ export function useOrderTracking(orderId) {
   }, [orderId])
 
   useEffect(() => {
+    cancelledRef.current = false
     connect()
     return () => {
+      cancelledRef.current = true
       clearTimeout(retryRef.current)
       if (wsRef.current) {
         wsRef.current.onclose = null // prevent reconnect on intentional close

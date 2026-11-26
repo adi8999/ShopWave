@@ -1,12 +1,14 @@
 import hashlib
 import json
+from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import models, schemas
-from app.auth import get_admin_user
-from app.database import get_db, cache_get, cache_set
+from app.auth import get_current_user
+from app.database import get_db, cache_get, cache_set, cache_invalidate_pattern
 from app.security.rate_limit import search_limiter
 from app.security.sanitize import sanitize_search_query
 
@@ -14,42 +16,41 @@ router = APIRouter(prefix="/api/products", tags=["products"])
 
 
 def _make_cache_key(**kwargs) -> str:
-    """Create a deterministic Redis key from query params."""
-    raw = json.dumps(kwargs, sort_keys=True)
+    raw = json.dumps(kwargs, sort_keys=True, default=str)
     digest = hashlib.md5(raw.encode()).hexdigest()
     return f"products:{digest}"
 
-
-# ─── List products (with search / filter / sort / pagination) ────────────────
 
 @router.get("", response_model=schemas.ProductPage)
 def list_products(
     request: Request,
     q: Optional[str] = Query(None, description="Search by name/description"),
     category: Optional[str] = Query(None),
-    min_price: Optional[float] = Query(None),
-    max_price: Optional[float] = Query(None),
+    min_price: Optional[Decimal] = Query(None, ge=0),
+    max_price: Optional[Decimal] = Query(None, ge=0),
+    in_stock: Optional[bool] = Query(None),
     sort_by: Optional[str] = Query(
         "newest",
-        description="price_asc | price_desc | rating_desc | newest"
+        description="price_asc | price_desc | rating_desc | newest",
     ),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     _rl: None = Depends(search_limiter),
 ):
-    # Try Redis cache first
+    if min_price is not None and max_price is not None and min_price > max_price:
+        raise HTTPException(status_code=400, detail="min_price cannot be greater than max_price")
+
     cache_key = _make_cache_key(
         q=q, category=category, min_price=min_price,
-        max_price=max_price, sort_by=sort_by, page=page, limit=limit
+        max_price=max_price, in_stock=in_stock, sort_by=sort_by, page=page, limit=limit,
     )
     cached = cache_get(cache_key)
     if cached:
         return cached
 
-    query = db.query(models.Product)
+    query = db.query(models.Product).filter(models.Product.is_active == True)
 
-    # Full-text search across name and description (sanitized)
     if q:
         try:
             q = sanitize_search_query(q)
@@ -66,8 +67,11 @@ def list_products(
         query = query.filter(models.Product.price >= min_price)
     if max_price is not None:
         query = query.filter(models.Product.price <= max_price)
+    if in_stock is True:
+        query = query.filter(models.Product.stock > 0)
+    elif in_stock is False:
+        query = query.filter(models.Product.stock == 0)
 
-    # Sorting
     sort_map = {
         "price_asc":   models.Product.price.asc(),
         "price_desc":  models.Product.price.desc(),
@@ -90,26 +94,103 @@ def list_products(
         pages=pages,
         limit=limit,
     )
-
-    # Cache for 5 minutes
-    cache_set(cache_key, result.model_dump(mode="json"), ttl=300)
-
+    cache_set(cache_key, result.model_dump(mode="json"), ttl=60)
     return result
 
 
-# ─── Categories ──────────────────────────────────────────────────────────────
-
 @router.get("/categories")
 def list_categories(db: Session = Depends(get_db)):
-    rows = db.query(models.Product.category).distinct().all()
+    rows = (
+        db.query(models.Product.category)
+        .filter(models.Product.is_active == True)
+        .distinct()
+        .all()
+    )
     return [r[0] for r in rows]
 
 
-# ─── Single product ───────────────────────────────────────────────────────────
-
 @router.get("/{product_id}", response_model=schemas.ProductOut)
 def get_product(product_id: int, db: Session = Depends(get_db)):
-    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    product = (
+        db.query(models.Product)
+        .filter(models.Product.id == product_id, models.Product.is_active == True)
+        .first()
+    )
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     return product
+
+
+@router.get("/{product_id}/variants", response_model=List[schemas.ProductVariantOut])
+def list_product_variants(product_id: int, db: Session = Depends(get_db)):
+    return (
+        db.query(models.ProductVariant)
+        .filter(models.ProductVariant.product_id == product_id)
+        .all()
+    )
+
+
+@router.get("/{product_id}/reviews", response_model=List[schemas.ReviewOut])
+def list_product_reviews(product_id: int, db: Session = Depends(get_db)):
+    return (
+        db.query(models.Review)
+        .filter(models.Review.product_id == product_id)
+        .order_by(models.Review.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/{product_id}/reviews", response_model=schemas.ReviewOut, status_code=201)
+def create_product_review(
+    product_id: int,
+    payload: schemas.ReviewCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    product = (
+        db.query(models.Product)
+        .filter(models.Product.id == product_id, models.Product.is_active == True)
+        .first()
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    existing = (
+        db.query(models.Review)
+        .filter(
+            models.Review.product_id == product_id,
+            models.Review.user_id == current_user.id,
+        )
+        .first()
+    )
+    if existing:
+        existing.rating = payload.rating
+        existing.comment = payload.comment
+        review = existing
+    else:
+        review = models.Review(
+            product_id=product_id,
+            user_id=current_user.id,
+            rating=payload.rating,
+            comment=payload.comment,
+        )
+        db.add(review)
+
+    db.flush()
+
+    agg = (
+        db.query(
+            func.avg(models.Review.rating),
+            func.count(models.Review.id),
+        )
+        .filter(models.Review.product_id == product_id)
+        .first()
+    )
+    if agg and agg[1]:
+        product.rating = round(Decimal(str(agg[0])), 2)
+        product.review_count = int(agg[1])
+
+    db.commit()
+    db.refresh(review)
+    cache_invalidate_pattern("products:*")
+    return review

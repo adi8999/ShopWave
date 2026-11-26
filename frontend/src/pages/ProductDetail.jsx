@@ -70,7 +70,7 @@ export default function ProductDetail() {
               <span className="rating-count">({product.review_count.toLocaleString()} reviews)</span>
             </div>
 
-            <div className="product-detail-price">${product.price.toFixed(2)}</div>
+            <div className="product-detail-price">${Number(product.price).toFixed(2)}</div>
 
             <p className="product-detail-desc">{product.description}</p>
 

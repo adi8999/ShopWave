@@ -6,11 +6,15 @@ import { useOrderTracking } from '../hooks/useOrderTracking'
 import './Orders.css'
 
 const STATUS_CONFIG = {
-  pending_payment: { icon: <Clock size={14} />, label: 'Pending Payment', badge: 'badge-warning' },
-  processing:      { icon: <Clock size={14} />, label: 'Processing',      badge: 'badge-warning' },
-  shipped:         { icon: <Truck size={14} />, label: 'Shipped',         badge: 'badge-accent' },
-  delivered:       { icon: <CheckCircle size={14} />, label: 'Delivered',  badge: 'badge-success' },
-  cancelled:       { icon: <XCircle size={14} />, label: 'Cancelled',     badge: 'badge-danger' },
+  draft:            { icon: <Clock size={14} />, label: 'Draft',            badge: 'badge-warning' },
+  awaiting_payment: { icon: <Clock size={14} />, label: 'Awaiting Payment', badge: 'badge-warning' },
+  pending_payment:  { icon: <Clock size={14} />, label: 'Pending Payment',  badge: 'badge-warning' },
+  paid:             { icon: <CheckCircle size={14} />, label: 'Paid',       badge: 'badge-success' },
+  processing:       { icon: <Clock size={14} />, label: 'Processing',       badge: 'badge-warning' },
+  shipped:          { icon: <Truck size={14} />, label: 'Shipped',          badge: 'badge-accent' },
+  delivered:        { icon: <CheckCircle size={14} />, label: 'Delivered',  badge: 'badge-success' },
+  cancelled:        { icon: <XCircle size={14} />, label: 'Cancelled',      badge: 'badge-danger' },
+  refunded:         { icon: <XCircle size={14} />, label: 'Refunded',       badge: 'badge-danger' },
 }
 
 function OrderCard({ order, isHighlighted, isExpanded, onToggle, formatDate }) {
@@ -43,7 +47,7 @@ function OrderCard({ order, isHighlighted, isExpanded, onToggle, formatDate }) {
           <span className={`badge ${statusCfg.badge}`}>
             {statusCfg.icon} {statusCfg.label}
           </span>
-          <span className="order-total">${order.total_amount.toFixed(2)}</span>
+          <span className="order-total">${Number(order.total_amount).toFixed(2)}</span>
           <button className="btn btn-ghost btn-sm">
             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
@@ -70,11 +74,11 @@ function OrderCard({ order, isHighlighted, isExpanded, onToggle, formatDate }) {
                 <div className="order-item-info">
                   <p className="order-item-name">{item.product?.name}</p>
                   <p className="order-item-meta">
-                    ×{item.quantity} &nbsp;·&nbsp; ${item.unit_price.toFixed(2)} each
+                    ×{item.quantity} &nbsp;·&nbsp; ${Number(item.unit_price).toFixed(2)} each
                   </p>
                 </div>
                 <span className="order-item-subtotal">
-                  ${(item.quantity * item.unit_price).toFixed(2)}
+                  ${(item.quantity * Number(item.unit_price)).toFixed(2)}
                 </span>
               </Link>
             ))}

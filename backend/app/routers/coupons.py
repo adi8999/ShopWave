@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -11,14 +12,14 @@ from app.security.rate_limit import checkout_limiter
 router = APIRouter(prefix="/api/coupons", tags=["coupons"])
 
 
-def calculate_discount(coupon: models.Coupon, subtotal: float) -> float:
+def calculate_discount(coupon: models.Coupon, subtotal: Decimal) -> Decimal:
     """Compute discount dollar amount based on percent_off or amount_off."""
-    discount = 0.0
+    discount = Decimal("0.00")
     if coupon.percent_off:
-        discount = round(subtotal * (coupon.percent_off / 100.0), 2)
+        discount = round(subtotal * (Decimal(str(coupon.percent_off)) / Decimal("100")), 2)
     elif coupon.amount_off:
-        discount = round(min(subtotal, coupon.amount_off), 2)
-    return max(0.0, discount)
+        discount = round(min(subtotal, Decimal(str(coupon.amount_off))), 2)
+    return max(Decimal("0.00"), discount)
 
 
 @router.post("/validate", response_model=schemas.CouponValidateResponse)
@@ -62,7 +63,7 @@ def validate_coupon(
         )
 
     discount = calculate_discount(coupon, payload.subtotal)
-    final_total = max(0.0, round(payload.subtotal - discount, 2))
+    final_total = max(Decimal("0.00"), round(payload.subtotal - discount, 2))
 
     detail_msg = f"{coupon.percent_off:.0f}% off" if coupon.percent_off else f"${coupon.amount_off:.2f} off"
     return schemas.CouponValidateResponse(
