@@ -85,7 +85,7 @@ export default function Cart() {
                       </button>
                     </div>
                     <span className="cart-item-price">
-                      ${(item.product.price * item.quantity).toFixed(2)}
+                      ${(Number(item.product.price) * item.quantity).toFixed(2)}
                     </span>
                     <button
                       className="btn btn-ghost btn-sm remove-btn"

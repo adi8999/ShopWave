@@ -1,294 +1,208 @@
 # ⚡ ShopWave — Full-Stack E-Commerce Platform
 
-A production-ready full-stack e-commerce web application featuring user authentication, shopping cart persistence, dynamic product catalog management, administrative CRUD & sales analytics dashboard, and an **AI-powered shopping assistant chatbot with Google Gemini tool calling**.
+> **Project Status**: **Staging / Hardening In Progress** — Core payment, security, migration, email abstraction, and AI-safety controls have been implemented and covered by automated tests. ShopWave is **not** guaranteed loophole-free; always complete environment-specific security checks (credential rotation, RDS security groups, TLS certificates, live Redis, and Stripe webhook verification) before handling real customer traffic.
+
+ShopWave is a full-stack e-commerce web application built with **React 19**, **FastAPI**, **PostgreSQL / SQLite**, **Redis**, **Stripe**, and an **AI shopping assistant** with allowlisted tools and user-scoped data access.
 
 ---
 
-## 🌐 Live Demo & Recruiter Preview
+## 🏗️ System Architecture
 
-- **🚀 Live Storefront**: [https://themselves-industry-admission-adam.trycloudflare.com](https://themselves-industry-admission-adam.trycloudflare.com)
-- **📖 Interactive API Docs (Swagger UI)**: [https://themselves-industry-admission-adam.trycloudflare.com/docs](https://themselves-industry-admission-adam.trycloudflare.com/docs)
-- **🛍️ Backend API Root**: [https://themselves-industry-admission-adam.trycloudflare.com/api](https://themselves-industry-admission-adam.trycloudflare.com/api)
-- **💚 API Health Check**: [https://themselves-industry-admission-adam.trycloudflare.com/health](https://themselves-industry-admission-adam.trycloudflare.com/health)
+```mermaid
+flowchart LR
+    Browser["React 19 + Vite SPA"] -->|HTTPS / WSS| Nginx["Nginx Reverse Proxy\n(HSTS, CSP, TLS, Size Limits)"]
+    Nginx -->|/api/*, /health, /metrics| FastAPI["FastAPI + Gunicorn\n(Uvicorn Workers)"]
+    Nginx -->|/api/orders/ws/*| WS["WebSocket Manager\n(Single-Use Ticket Auth)"]
+    FastAPI --> DB[("PostgreSQL / RDS\n(NUMERIC(12,2), Alembic)")]
+    FastAPI --> Redis[("Redis\n(Rate Limits, WS Tickets, Cache)")]
+    FastAPI --> Stripe["Stripe API & Signed Webhooks"]
+    FastAPI --> Email["Email Provider\n(SMTP / AWS SES)"]
+    FastAPI --> AI["Gemini / OpenAI / OpenRouter\n(Allowlisted Tools, Sanitized)"]
+    FastAPI --> S3["S3 / Cloudflare R2\n(Product Image Uploads)"]
+```
 
-### 🔑 Demo Accounts for Evaluators
-| Role | Email | Password | Permissions & Features |
+---
+
+## 📊 Data Model Overview
+
+- **Users (`users`)**: `id`, `name`, `email`, `hashed_password` (bcrypt), `is_admin`, `is_verified`, `token_version`, `mfa_enabled`, `mfa_secret`.
+- **Products (`products`)**: `id`, `name`, `description`, `price` (`NUMERIC(12,2) > 0`), `category`, `stock` (`>= 0`), `low_stock_threshold`, `is_active` (soft-delete), `rating`, `review_count`.
+- **Product Variants (`product_variants`)**: `id`, `product_id`, `name`, `sku`, `price_delta` (`NUMERIC(12,2)`), `stock` (`>= 0`).
+- **Reviews (`reviews`)**: `id`, `product_id`, `user_id`, `rating` (`1–5`), `comment`.
+- **Wishlist (`wishlist_items`)**: `id`, `user_id`, `product_id`.
+- **Cart (`cart_items`)**: `id`, `user_id`, `product_id`, `quantity` (`> 0`).
+- **Orders (`orders`) & OrderItems (`order_items`)**: `total_amount` (`NUMERIC(12,2)`), `discount_amount` (`NUMERIC(12,2)`), `status` (`draft -> awaiting_payment -> paid -> processing -> shipped -> delivered`, plus `cancelled` / `refunded`), `payment_status`, `stripe_payment_intent_id`, immutable `unit_price` snapshots.
+- **Stripe Events (`stripe_events`)**: `event_id` (unique) for webhook idempotency.
+- **Coupons (`coupons`)**: `code`, `percent_off` / `amount_off`, `min_order_amount`, `expires_at`, `max_uses`, `used_count`, `is_active`.
+- **Tokens & Audit (`refresh_tokens`, `verification_tokens`, `audit_logs`)**: Refresh token rotation, one-time email/password-reset tokens, and admin action audit trail.
+
+---
+
+## 🔑 Demo & Stripe Test Credentials
+
+> **Note**: Demo credentials are for local/staging evaluation only. **Never** use demo passwords or Stripe test keys in production.
+
+| Role | Email | Password | Notes |
 |---|---|---|---|
-| **Demo Customer** | `demo@shopwave.com` | `DemoPass123!` *(placeholder)* | Browse catalog, persistent cart, coupon code (`SAVE10`), mock Stripe checkout, live Gemini chat assistant |
-| **Store Admin** | `admin@shopwave.com` | `AdminPass123!` *(placeholder)* | Access `/admin` dashboard, catalog CRUD, manage order statuses, live sales analytics |
+| **Demo Customer** | `demo@yourdomain.com` | Set via `DEMO_USER_PASSWORD` | Seeded by `python -m app.seed` |
+| **Store Admin** | `admin@yourdomain.com` | Set via `ADMIN_PASSWORD` | Admin dashboard & analytics |
+| **Stripe Test Mode** | — | — | Use `sk_test_...`, `pk_test_...`, `whsec_...` |
 
 ---
 
-## 🌟 Key Features
+## ⚙️ Environment Variables
 
-- **🤖 AI Shopping Assistant & Customer Support Chatbot**:
-  - **Tool Calling (Function Calling)**: Powered by Google Gemini / OpenRouter multi-turn function calling with live database execution.
-    - `search_products(query, max_price, category)`: Scans catalog products across multiple fields, prices, and categories.
-    - `get_order_status(order_id)`: Fetches live order fulfillment status (`processing`, `shipped`, `delivered`), total amount, shipping destination, and itemized receipts.
-  - **Interactive Clickable Product Cards**: Chatbot responses include interactive product cards with images, prices, ratings, direct links to product pages, and a **1-click "Add to Cart"** button.
-  - **Floating Drawer & Navbar Trigger**: Accessible via a floating widget launcher button at the bottom-right and an **AI Assistant** pill in the top navigation bar.
-  - **Quick Suggestion Chips**: Instant starter prompts (e.g. *"Tech under $300"*, *"Track order #1001"*, *"Daily essentials"*, *"Shipping & returns"*).
-  - **Session Persistence**: Chat history persists across page navigation using `sessionStorage`.
-- **Storefront & Catalog**:
-  - Browse products across multiple categories (Electronics, Clothing, Books, Home).
-  - Search by title, filter by category, and sort by price range.
-  - Interactive product detail pages with real-time stock availability.
-- **Cart & Order Checkout**:
-  - Persistent shopping cart synced with backend API per user.
-  - Stripe payment processing integration with card validation.
-  - Multi-item checkout flow with address validation and stock updates.
-  - Order history tracking with item breakdown and status updates.
-- **Authentication & Security**:
-  - User registration & login with JWT bearer tokens.
-  - Secure password hashing using native `bcrypt`.
-  - Account-level data isolation (users only see their own cart and orders).
-- **Admin Panel & Sales Monitoring**:
-  - Role-based authorization (`is_admin=True` check on protected routes).
-  - **Full Product CRUD**: Add, edit, and delete catalog products inline with confirm modals.
-  - **Sales Analytics Dashboard**: Real-time revenue, order counts, top-selling products visualization, and order status management.
+### Backend (`backend/.env` — never commit!)
+Copy [backend/.env.example](backend/.env.example) to `backend/.env` and replace placeholders:
+
+| Variable | Required | Description |
+|---|---|---|
+| `SECRET_KEY` | Yes (32+ chars) | JWT & tracking token signing secret |
+| `ENVIRONMENT` | Prod: `production` | Enables fail-closed Redis, mandatory `STRIPE_WEBHOOK_SECRET`, and disables console email |
+| `FRONTEND_URL` | Yes | Base URL used in verification and password reset links |
+| `DATABASE_URL` | Yes | PostgreSQL (`postgresql://...`) or SQLite (`sqlite:///./shopwave.db`) |
+| `REDIS_URL` | Prod: Yes | Redis connection URL (e.g. `redis://localhost:6379`) |
+| `ALLOWED_ORIGINS` | Yes | Comma-separated CORS origins |
+| `TRUSTED_PROXIES` | Prod: Yes | Comma-separated proxy IPs allowed to set `X-Forwarded-For` (`127.0.0.1,::1`) |
+| `EMAIL_PROVIDER` | Prod: `smtp` or `ses` | `console` (dev only), `smtp`, `ses`, or `memory` (tests) |
+| `EMAIL_FROM` | Email | Sender email address |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_USE_TLS` | If `EMAIL_PROVIDER=smtp` | SMTP delivery settings |
+| `AWS_SES_REGION` | If `EMAIL_PROVIDER=ses` | AWS region for SES |
+| `STRIPE_SECRET_KEY` | Payments | Stripe secret key (`sk_test_...` / `sk_live_...`) |
+| `STRIPE_PUBLISHABLE_KEY` | Payments | Stripe publishable key |
+| `STRIPE_WEBHOOK_SECRET` | Prod: Yes | Stripe webhook signing secret (`whsec_...`) |
+| `S3_BUCKET` / `S3_ENDPOINT_URL` / `S3_PUBLIC_URL` | Optional | S3 or Cloudflare R2 bucket for product image uploads |
+| `SENTRY_DSN` | Optional | Sentry DSN for error tracking |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` | Optional | AI assistant provider key |
 
 ---
 
-## 🛠️ Architecture & Tech Stack
+## 🚀 Local Development & Migrations
 
-| Layer | Technologies |
-|---|---|
-| **Frontend** | React 19, Vite, React Router 7, Axios, Lucide Icons, React Hot Toast, Stripe Elements |
-| **Backend** | FastAPI (Python 3.11+), Uvicorn / Gunicorn, Pydantic v2, SQLAlchemy ORM |
-| **AI & LLM** | Google Gemini (`google-genai`), OpenAI / OpenRouter Tool Calling API |
-| **Database & Cache** | PostgreSQL (AWS RDS) / SQLite (Local Dev), Redis |
-| **Server & Deployment** | AWS EC2 (Ubuntu 22.04 / 24.04), Nginx Reverse Proxy, Systemd Service |
-
----
-
-## 🤖 AI Chatbot Architecture
-
-```
-User in Browser (React ChatWidget / Navbar Trigger)
-        │
-        ▼ (POST /api/chat with message & history)
-FastAPI Backend (/api/chat)
-        │
-        ▼ (Prompt + System Instructions + Database Tools)
-Google Gemini LLM / OpenRouter
-        │
-        ├─► [Tool Call: search_products] ──► Query Product Table (SQLAlchemy)
-        ├─► [Tool Call: get_order_status] ──► Query Order & OrderItem Tables
-        │
-        ▼ (Tool Output Fed Back into LLM Context)
-Google Gemini Synthesizes Conversational Answer
-        │
-        ▼ (JSON: reply text + structured product cards + tool metadata)
-React Chat Drawer (Renders message + interactive product cards + 1-click cart add)
-```
-
----
-
-## 🚀 Local Development Setup
-
-### 1. Backend Setup
-
+### 1. Backend Setup & Alembic Migrations
 ```bash
 cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-
-# Copy environment template
 cp .env.example .env
 
-# Configure your keys in backend/.env:
-# GEMINI_API_KEY=your_gemini_api_key (or OPENROUTER_API_KEY=...)
-# DATABASE_URL=sqlite:///./shopwave.db (for local development)
+# Apply database migrations (never rely on create_all() in production)
+alembic upgrade head
 
-# Run database migrations and auto-seed products
+# Optional: seed demo data
 python -m app.seed
 
-# Start FastAPI dev server
+# Start dev server
 uvicorn main:app --reload --port 8000
 ```
 
-API Documentation will be available at: `http://localhost:8000/docs`
-
 ### 2. Frontend Setup
-
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Visit the app at: `http://localhost:5173`
-
----
-
-## 🚀 Free Tier Deployment (Neon + Render + Vercel)
-
-ShopWave can be deployed 100% free with automated CI/CD for recruiter portfolios:
-
+### 3. Stripe Webhook Local Testing
+```bash
+stripe listen --forward-to localhost:8000/api/payments/webhook
 ```
-Vercel (React Frontend) ──► Render (FastAPI Web Service) ──► Neon (Serverless Postgres)
+Copy the printed `whsec_...` into `backend/.env` as `STRIPE_WEBHOOK_SECRET`.
+
+---
+
+## 🧪 Testing & Coverage
+
+### Backend Unit & SQLite Tests (`pytest` + `pytest-cov`)
+```bash
+cd backend
+pytest tests/ -v --cov=app --cov-report=term-missing
 ```
 
-### 1. Database: Neon (Serverless PostgreSQL)
-1. Sign up for free at [neon.tech](https://neon.tech) and create a database (e.g. `shopwave`).
-2. Copy the connection string from your Neon dashboard:
-   ```
-   postgresql://user:password@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require
-   ```
-   *(Both `postgresql://` and `postgres://` formats are automatically supported).*
+### PostgreSQL & Redis Integration Tests
+Integration tests in `backend/tests/integration/test_postgres_redis.py` run automatically in GitHub Actions against `postgres:16` and `redis:7` service containers, or locally when `POSTGRES_TEST_URL` and `REDIS_TEST_URL` are provided:
+```bash
+cd backend
+POSTGRES_TEST_URL="postgresql://shopwave:shopwave_ci_password@localhost:5432/shopwave_test" \
+REDIS_TEST_URL="redis://localhost:6379/0" \
+pytest tests/integration/ -v
+```
+When those variables are unset, integration tests skip cleanly instead of falsely passing against SQLite.
 
-### 2. Backend: Render (FastAPI Web Service)
-1. Sign up at [render.com](https://render.com) and create a **New Web Service** linked to your ShopWave repository.
-2. Select branch `free-deploy` (or `main`) and configure:
-   - **Root Directory**: `backend`
-   - **Runtime**: `Python 3`
-   - **Build Command**: `pip install -r requirements.txt && python -m app.seed`
-   - **Start Command**: `gunicorn main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT`
-   - **Health Check Path**: `/health`
-   - **Plan**: `Free`
-3. Set the following **Environment Variables** in Render's dashboard:
-   | Key | Example Value | Description |
-   |---|---|---|
-   | `DATABASE_URL` | `postgresql://user:pass@ep-xyz.../neondb?sslmode=require` | Your Neon database connection URI |
-   | `SECRET_KEY` | `python3 -c "import secrets; print(secrets.token_hex(32))"` | 32+ char secret for JWT auth signing |
-   | `ALLOWED_ORIGINS` | `https://your-shopwave.vercel.app,http://localhost:5173` | Allowed frontend origins for CORS |
-   | `ADMIN_EMAIL` | `admin@shopwave.com` | Email for store administrator |
-   | `ADMIN_PASSWORD` | `AdminPass123!` | Password for store administrator |
-   | `DEMO_USER_EMAIL` | `demo@shopwave.com` | Email for demo customer account |
-   | `DEMO_USER_PASSWORD` | `DemoPass123!` | Password for demo customer account |
-   | `STRIPE_SECRET_KEY` | `sk_test_...` | Stripe test secret key |
-   | `STRIPE_PUBLISHABLE_KEY` | `pk_test_...` | Stripe test publishable key |
-   | `GEMINI_API_KEY` | `AIzaSy...` | Free API key from Google AI Studio |
+### Frontend Unit & Playwright E2E Tests
+```bash
+cd frontend
+npm ci
+npm run test -- --run
+npm run build
 
-### 3. Frontend: Vercel (React 19 + Vite)
-1. Sign up at [vercel.com](https://vercel.com) and click **Add New Project** -> import your GitHub repository.
-2. Configure settings:
-   - **Framework Preset**: `Vite`
-   - **Root Directory**: `frontend`
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
-3. Add Environment Variable:
-   | Key | Value |
-   |---|---|
-   | `VITE_API_URL` | Your Render web service URL (e.g. `https://your-shopwave-backend.onrender.com` — **no trailing slash**) |
-4. Click **Deploy**. Vercel uses the included `frontend/vercel.json` to handle client-side routing rewrites (`/* -> /index.html`) so refreshing routes like `/cart`, `/admin`, or `/orders` works flawlessly.
+# Install Chromium dependencies (required in CI / fresh machines) and run E2E
+npx playwright install --with-deps chromium
+npm run test:e2e
+```
 
 ---
 
-## ☁️ AWS Single-Server Deployment Guide (Alternative)
+## ☁️ Staging & Deployment Procedures
 
-ShopWave is also configured for single-server production deployment on **AWS EC2 (Ubuntu 22.04 / 24.04)** paired with an **AWS RDS PostgreSQL** managed database.
+### Staging Validation Checklist
+1. Deploy to a staging environment with `ENVIRONMENT=production`, staging PostgreSQL (RDS/Neon), staging Redis, and `EMAIL_PROVIDER=smtp` or `ses`.
+2. Run `alembic upgrade head` against staging PostgreSQL.
+3. Run `POSTGRES_TEST_URL=... REDIS_TEST_URL=... pytest tests/ -v` against staging-equivalent services.
+4. Verify Stripe test-mode webhooks (`stripe trigger payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`).
+5. Run `npm run build` and `npm run test:e2e` against the staging preview build.
 
-### 🏗️ Production Architecture
-- **Nginx (Reverse Proxy)**:
-  - Serves compiled static frontend files directly from `/var/www/shopwave` with `try_files $uri /index.html` (for React Router client-side routing).
-  - Reverse proxies `/api/` requests to Gunicorn on `127.0.0.1:8000`.
-  - Terminates TLS/HTTPS via Let's Encrypt certificates managed by Certbot.
-- **Systemd Service (`shopwave.service`)**:
-  - Manages Gunicorn running Uvicorn workers (`gunicorn main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 127.0.0.1:8000`).
-  - Auto-starts on boot and restarts automatically on failures.
-- **Database**:
-  - AWS RDS PostgreSQL accessed privately over port 5432.
+### Option A: AWS (EC2 + RDS + Nginx + Systemd)
+1. **RDS Security Group**: Restrict inbound port `5432` exclusively to the EC2 instance's security group (never `0.0.0.0/0`).
+2. **Systemd**: Install `deploy/shopwave.service` to `/etc/systemd/system/shopwave.service` (`NoNewPrivileges=true`, `ProtectSystem=strict`, `PrivateTmp=true`).
+3. **Nginx**: Copy `deploy/nginx.conf` to `/etc/nginx/sites-available/shopwave`, set `YOUR_DOMAIN`, and run `sudo certbot --nginx -d YOUR_DOMAIN`.
+4. **Automated Rollout**: GitHub Actions (`.github/workflows/deploy.yml`) triggers `deploy/redeploy.sh` after CI passes and manual environment approval, running `alembic upgrade head` before restarting Gunicorn, checking `/health`, and rolling back on failure.
 
----
-
-### 🔑 Required Environment Variables
-
-Create `backend/.env` on the EC2 server (refer to `backend/.env.example`):
-
-| Variable | Description | Example |
-|---|---|---|
-| `SECRET_KEY` | 32+ character random secret for JWT signing | Generate via `python3 -c 'import secrets; print(secrets.token_hex(32))'` |
-| `DATABASE_URL` | PostgreSQL connection URL | `postgresql://user:password@rds-endpoint.amazonaws.com:5432/shopwave` |
-| `ALLOWED_ORIGINS` | Comma-separated allowed CORS origins | `https://yourdomain.com,https://www.yourdomain.com` |
-| `ADMIN_EMAIL` | Admin login email | `admin@yourdomain.com` |
-| `ADMIN_PASSWORD` | Admin initial password (never hardcoded) | Strong password |
-| `STRIPE_SECRET_KEY` | Stripe live/test secret key | `sk_test_...` |
-| `STRIPE_PUBLISHABLE_KEY` | Stripe live/test publishable key | `pk_test_...` |
-| `GEMINI_API_KEY` | Google Gemini API key for chatbot | `AIzaSy...` |
+### Option B: Alternative (Docker / Render / Railway)
+1. Set `ENVIRONMENT=production`, `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `EMAIL_PROVIDER`, and `ALLOWED_ORIGINS`.
+2. Run `alembic upgrade head` as a pre-deploy release command.
+3. Start the API with `gunicorn main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT`.
 
 ---
 
-### 🚀 Initial Provisioning on EC2
+## 🔐 Owner-Only Security Checklist (Credential Rotation & History Cleanup)
 
-1. **SSH into your EC2 instance**:
+Automated repository changes **cannot** rotate external provider credentials or safely rewrite shared Git history without owner coordination:
+1. **Rotate Credentials**: Rotate any database passwords (RDS/Neon), `SECRET_KEY`, Stripe keys/webhook secrets, SMTP/AWS keys, and AI provider keys (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`) that existed in local `.env` files or prior deployments.
+2. **Purge Git History (if needed)**: `ShopWave-fixed.zip` was previously committed (`e7cc1d8`) and has now been untracked (`git rm --cached`). While inspection showed only `backend/.env.example` inside that zip, if you want to permanently scrub archive files from Git history, run [`git-filter-repo`](https://github.com/newren/git-filter-repo) on a fresh mirror clone:
    ```bash
-   ssh -i your-key.pem ubuntu@<ec2-ip-or-dns>
+   git clone --mirror https://github.com/adi8999/ShopWave.git
+   cd ShopWave.git
+   git filter-repo --invert-paths --path ShopWave-fixed.zip
+   git push --force --all
    ```
-
-2. **Clone the repository and set up environment**:
-   ```bash
-   git clone https://github.com/adi8999/ShopWave.git /home/ubuntu/shopwave
-   cd /home/ubuntu/shopwave
-   cp backend/.env.example backend/.env
-   nano backend/.env  # Fill in your real RDS, SECRET_KEY, and other credentials
-   ```
-
-3. **Run the provisioning script**:
-   ```bash
-   bash deploy/setup_ec2.sh yourdomain.com
-   ```
-   *This script verifies `backend/.env`, installs system packages (Python, Nginx, Certbot), sets up the Python venv, seeds initial data, configures the systemd daemon, and sets up Nginx.*
 
 ---
 
-### 🔒 Enabling HTTPS (SSL/TLS)
-
-Once your domain's DNS `A` records (e.g. `yourdomain.com` and `www.yourdomain.com`) point to your EC2 instance's Elastic IP, run:
+## 💾 Disaster Recovery & Backups
 
 ```bash
-sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+# Backup
+pg_dump "$DATABASE_URL" --format=custom --file="shopwave_$(date +%Y%m%d_%H%M%S).dump"
+
+# Restore
+pg_restore --clean --if-exists --dbname="$DATABASE_URL" shopwave_YYYYMMDD_HHMMSS.dump
+alembic upgrade head
 ```
 
-Certbot will automatically obtain certificates from Let's Encrypt, configure HTTPS in Nginx, set up automatic HTTP -> HTTPS redirection, and register a systemd auto-renewal timer.
+---
+
+## ⚠️ Known Limitations
+
+- Password-reset and email-verification delivery relies on `EMAIL_PROVIDER` (`smtp` or `ses` in production; `console` logs redacted metadata in non-production only).
+- Checkout concurrency locking (`SELECT ... FOR UPDATE`) requires PostgreSQL; SQLite unit tests exercise the application logic without true row-level locks.
+- Frontend checkout uses Stripe Elements test/sandbox flow; ensure `VITE_STRIPE_PUBLISHABLE_KEY` matches your Stripe environment.
 
 ---
 
-### 🔄 Redeploying Updates
+## 🤝 Contributing & License
 
-Whenever you push new code to GitHub, deploy the updates to EC2 with a single command:
-
-```bash
-cd /home/ubuntu/shopwave
-bash deploy/redeploy.sh
-```
-
-This script:
-1. Pulls the latest commits from Git.
-2. Updates backend dependencies in `venv`.
-3. Restarts the `shopwave` systemd backend service.
-4. Copies updated `frontend/dist` to `/var/www/shopwave`.
-5. Verifies and reloads Nginx.
-
----
-
-### 🛡️ "Before Going Live" Checklist
-
-Before launching your production application, complete these essential steps:
-
-- [ ] **Rotate RDS Password**: If your RDS password was ever stored in plain text or shared, rotate it immediately in the AWS RDS Console and update `DATABASE_URL` in `backend/.env`.
-- [ ] **Set a Strong `SECRET_KEY`**: Ensure `SECRET_KEY` is at least 32 characters long.
-  ```bash
-  python3 -c "import secrets; print(secrets.token_hex(32))"
-  ```
-- [ ] **Set Admin Credentials**: Set `ADMIN_EMAIL` and a unique `ADMIN_PASSWORD` in `backend/.env`, then run:
-  ```bash
-  cd /home/ubuntu/shopwave/backend && source venv/bin/activate && python -m app.seed
-  ```
-- [ ] **Lock Down RDS Security Group**:
-  - Open AWS RDS Console -> Databases -> your DB -> Connectivity & security -> VPC security groups.
-  - Delete any inbound rule permitting `0.0.0.0/0` on port 5432.
-  - Add an inbound rule allowing Type: `PostgreSQL` (port 5432) with Source set to the **Security Group ID of your EC2 instance** (e.g., `sg-0abc123...`).
-- [ ] **Configure Strict CORS**: In `backend/.env`, set `ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com` (no wildcards or local addresses in production).
-- [ ] **Restart Backend Service**:
-  ```bash
-  sudo systemctl restart shopwave
-  ```
-
-
----
-
-## 📄 Resume Bullet Point
-
-> **AI Chatbot & Tool Integration**: Built an end-to-end AI shopping assistant in FastAPI and React using Gemini function calling, allowing users to query catalog items and fetch live order statuses via natural language conversation.
+1. Fork the repository and create a feature branch.
+2. Run backend (`pytest`) and frontend (`npm run test -- --run`) suites before opening a PR.
+3. Licensed under the **MIT License**.

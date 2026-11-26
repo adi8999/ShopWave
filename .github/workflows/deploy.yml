@@ -1,0 +1,27 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build frontend artifact
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+      - name: Deploy via SSH (migrations -> rollout -> health check -> rollback)
+        if: ${{ secrets.EC2_HOST != '' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            bash /home/ubuntu/shopwave/deploy/redeploy.sh

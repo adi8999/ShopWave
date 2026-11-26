@@ -179,7 +179,7 @@ export default function AdminDashboard() {
                           <span className="rank">#{i + 1}</span>
                           <div className="top-product-info">
                             <div className="top-product-name">{p.product_name}</div>
-                            <div className="top-product-meta">{p.total_sold} units · ${p.total_revenue.toFixed(2)} revenue</div>
+                            <div className="top-product-meta">{p.total_sold} units · ${Number(p.total_revenue).toFixed(2)} revenue</div>
                           </div>
                           <div className="top-product-bar-wrap">
                             <div
@@ -207,7 +207,7 @@ export default function AdminDashboard() {
                             <div className="recent-order-meta">{o.shipping_name} · {o.shipping_city} · {o.item_count} items</div>
                           </div>
                           <div className="recent-order-right">
-                            <div className="recent-order-amount">${o.total_amount.toFixed(2)}</div>
+                            <div className="recent-order-amount">${Number(o.total_amount).toFixed(2)}</div>
                             <StatusBadge status={o.status} />
                           </div>
                         </div>
@@ -290,7 +290,7 @@ export default function AdminDashboard() {
                           </div>
                         </td>
                         <td><span className="cat-badge">{p.category}</span></td>
-                        <td className="price-cell">${p.price.toFixed(2)}</td>
+                        <td className="price-cell">${Number(p.price).toFixed(2)}</td>
                         <td>
                           <span style={{ color: p.stock < 10 ? '#ef4444' : p.stock < 30 ? '#f59e0b' : '#10d97e', fontWeight: 600 }}>
                             {p.stock}

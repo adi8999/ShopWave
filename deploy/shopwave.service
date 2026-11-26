@@ -1,0 +1,31 @@
+[Unit]
+Description=ShopWave FastAPI Backend (Gunicorn)
+After=network.target redis-server.service
+
+[Service]
+Type=notify
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/shopwave/backend
+EnvironmentFile=/home/ubuntu/shopwave/backend/.env
+ExecStart=/home/ubuntu/shopwave/backend/venv/bin/gunicorn main:app \
+    --workers 2 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind 127.0.0.1:8000 \
+    --access-logfile - \
+    --error-logfile -
+Restart=on-failure
+RestartSec=5
+
+# Least-privilege systemd hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/shopwave/backend
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

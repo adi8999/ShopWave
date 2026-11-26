@@ -50,7 +50,7 @@ export default function ProductCard({ product }) {
         </div>
 
         <div className="product-card-footer">
-          <span className="product-card-price">${product.price.toFixed(2)}</span>
+          <span className="product-card-price">${Number(product.price).toFixed(2)}</span>
           <button
             className="btn btn-primary btn-sm product-card-add-btn"
             id={`add-to-cart-${product.id}`}

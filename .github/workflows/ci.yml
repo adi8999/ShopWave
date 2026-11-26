@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main, security-production-readiness]
+  pull_request:
+    branches: [main]
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ensure no .env or archive files are tracked
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$|\.zip$|\.pem$|\.key$'; then
+            echo "ERROR: Sensitive or archive file is tracked in git."
+            exit 1
+          fi
+      - name: Scan tracked files for literal secret patterns (without printing values)
+        run: |
+          if git grep -q -I -E '(sk_live_|pk_live_|AIza[0-9A-Za-z\-_]{20,}|sk-or-v1-[A-Za-z0-9]{10,}|AKIA[0-9A-Z]{16})'; then
+            echo "ERROR: Potential secret literal detected in tracked files:"
+            git grep -l -I -E '(sk_live_|pk_live_|AIza[0-9A-Za-z\-_]{20,}|sk-or-v1-[A-Za-z0-9]{10,}|AKIA[0-9A-Z]{16})'
+            exit 1
+          fi
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: shopwave
+          POSTGRES_PASSWORD: shopwave_ci_password
+          POSTGRES_DB: shopwave_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt pytest pytest-cov ruff
+      - name: Lint backend
+        run: |
+          cd backend
+          ruff check app/ main.py --select E9,F63,F7,F82
+      - name: Run Alembic migrations on PostgreSQL
+        env:
+          DATABASE_URL: postgresql://shopwave:shopwave_ci_password@localhost:5432/shopwave_test
+          SECRET_KEY: ci-secret-key-must-be-at-least-32-characters-long
+        run: |
+          cd backend
+          alembic upgrade head
+      - name: Run unit & PostgreSQL/Redis integration tests with coverage
+        env:
+          POSTGRES_TEST_URL: postgresql://shopwave:shopwave_ci_password@localhost:5432/shopwave_test
+          REDIS_TEST_URL: redis://localhost:6379/0
+          SECRET_KEY: ci-secret-key-must-be-at-least-32-characters-long
+        run: |
+          cd backend
+          pytest tests/ -v --cov=app --cov-report=term-missing
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+      - name: Run Vitest unit tests
+        run: |
+          cd frontend
+          npm run test -- --run
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+      - name: Install Playwright Chromium & run E2E tests
+        run: |
+          cd frontend
+          npx playwright install --with-deps chromium
+          npm run test:e2e

@@ -202,7 +202,7 @@ function CheckoutFormContent({ items, totalPrice, clearCart, shipping, tax, orde
                   <p className="checkout-item-qty">×{item.quantity}</p>
                 </div>
                 <span className="checkout-item-price">
-                  ${(item.product?.price * item.quantity).toFixed(2)}
+                  ${(Number(item.product?.price) * item.quantity).toFixed(2)}
                 </span>
               </div>
             ))}
