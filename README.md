@@ -1,6 +1,6 @@
 # ⚡ ShopWave — Full-Stack E-Commerce Platform
 
-A production-ready full-stack e-commerce web application featuring user authentication, shopping cart persistence, dynamic product catalog management, administrative CRUD & sales analytics dashboard, and an **AI-powered shopping assistant chatbot with Google Gemini tool calling**.
+A Deployment-ready full-stack e-commerce web application featuring user authentication, shopping cart persistence, dynamic product catalog management, administrative CRUD & sales analytics dashboard, and an **AI-powered shopping assistant chatbot with Google Gemini tool calling**.
 
 ---
 
